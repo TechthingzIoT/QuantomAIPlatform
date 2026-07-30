@@ -1,0 +1,20 @@
+# ======================================================
+# QAIR Runtime Configuration
+# ======================================================
+
+model: Qwen2.5-3B-Instruct-Q4_K_M.gguf
+
+# Current model location (Hugging Face cache)
+model_path: "/Users/cashamerica/.cache/huggingface/hub/models--bartowski--Qwen2.5-3B-Instruct-GGUF/snapshots/f302c64a2269a69fb27b2f9473b362f5bb8e78d8/Qwen2.5-3B-Instruct-Q4_K_M.gguf"
+
+temperature: 0.3
+
+top_p: 0.95
+
+max_tokens: 256
+
+context_size: 2048
+
+gpu_layers: 18
+
+verbose: false
