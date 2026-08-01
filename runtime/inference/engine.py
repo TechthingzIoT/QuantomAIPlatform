@@ -20,7 +20,7 @@ from typing import Optional, List, Dict
 
 from llama_cpp import Llama
 
-from runtime.config.settings import settings
+from runtime.config.loader import load_settings
 
 
 class LlamaEngine:
@@ -38,12 +38,15 @@ class LlamaEngine:
         n_gpu_layers: Optional[int] = None,
     ):
 
-        self.model_path = model_path or settings.model_path
-        self.n_ctx = n_ctx or settings.context_size
+        # Load runtime configuration
+        self.settings = load_settings()
+
+        self.model_path = model_path or self.settings.model_path
+        self.n_ctx = n_ctx or self.settings.context_size
         self.n_gpu_layers = (
             n_gpu_layers
             if n_gpu_layers is not None
-            else settings.gpu_layers
+            else self.settings.gpu_layers
         )
 
         model = Path(self.model_path)
@@ -65,7 +68,7 @@ class LlamaEngine:
             model_path=str(model),
             n_ctx=self.n_ctx,
             n_gpu_layers=self.n_gpu_layers,
-            verbose=settings.verbose,
+            verbose=self.settings.verbose,
         )
 
         elapsed = time.time() - start
@@ -91,8 +94,8 @@ class LlamaEngine:
         or
 
             messages=[
-                {"role":"system","content":"..."},
-                {"role":"user","content":"..."},
+                {"role": "system", "content": "..."},
+                {"role": "user", "content": "..."},
             ]
         """
 
@@ -122,13 +125,21 @@ class LlamaEngine:
 
         output = self.llm.create_chat_completion(
             messages=messages,
-            temperature=temperature
-            if temperature is not None
-            else settings.temperature,
-            top_p=top_p if top_p is not None else settings.top_p,
-            max_tokens=max_tokens
-            if max_tokens is not None
-            else settings.max_tokens,
+            temperature=(
+                temperature
+                if temperature is not None
+                else self.settings.temperature
+            ),
+            top_p=(
+                top_p
+                if top_p is not None
+                else self.settings.top_p
+            ),
+            max_tokens=(
+                max_tokens
+                if max_tokens is not None
+                else self.settings.max_tokens
+            ),
         )
 
         elapsed = time.time() - start

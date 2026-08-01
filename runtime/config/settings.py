@@ -1,16 +1,26 @@
-from pathlib import Path
-import yaml
+"""
+=========================================================
+QAIR Settings Model
+=========================================================
+"""
+
+from pydantic import BaseModel
 
 
-class Settings:
-    def __init__(self):
-        config_path = Path(__file__).parent / "default.yaml"
+class QAIRSettings(BaseModel):
 
-        with open(config_path, "r", encoding="utf-8") as f:
-            self.config = yaml.safe_load(f)
+    model: str
 
-    def __getattr__(self, key):
-        return self.config.get(key)
+    model_path: str
 
+    temperature: float
 
-settings = Settings()
+    top_p: float
+
+    max_tokens: int
+
+    context_size: int
+
+    gpu_layers: int
+
+    verbose: bool
