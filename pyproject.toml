@@ -1,6 +1,6 @@
 [project]
 name = "qair"
-version = "0.1.0"
+version = "0.3.0"
 description = "Quantom AI Runtime"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,5 +38,16 @@ include = ["runtime*"]
 [tool.setuptools.package-data]
 runtime = [
     "prompts/*.txt",
-    "config/*.yaml"
+    "config/*.yaml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+norecursedirs = [
+    "third_party",
+    ".git",
+    ".venv",
+    "__pycache__",
 ]

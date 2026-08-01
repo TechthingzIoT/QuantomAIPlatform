@@ -1,4 +1,4 @@
-from runtime.models.model_manager import ModelManager
+from runtime.models.manager import ModelManager
 
 manager = ModelManager()
 

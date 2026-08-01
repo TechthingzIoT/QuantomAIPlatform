@@ -1,8 +1,14 @@
 from runtime.models.manager import ModelManager
 
-manager = ModelManager("models")
 
-print("Installed Models")
+def test_model_manager_creation():
+    manager = ModelManager()
+    assert manager is not None
 
-for model in manager.list_models():
-    print("-", model.name)
+
+def test_list_models():
+    manager = ModelManager()
+
+    models = manager.list_models()
+
+    assert isinstance(models, list)
