@@ -1,174 +1,183 @@
 """
 =========================================================
-QAIR (Quantom AI Runtime)
+QAIR Command Line Interface
+=========================================================
 
-File:
-    runtime/cli.py
-
-Purpose:
-    Interactive command-line interface for QAIR.
+Professional CLI for the Quantom AI Runtime.
 
 Author:
     TIOTAIROBOTIX
 =========================================================
 """
 
-import os
+from __future__ import annotations
 
-from runtime.inference.engine import LlamaEngine
-from runtime.chat.session import ChatSession
+import typer
+from rich.console import Console
+from rich.table import Table
 
+from runtime.models.manager import ModelManager
+from runtime.models.registry import set_active_model
 
-# ---------------------------------------------------------
-# Banner
-# ---------------------------------------------------------
+app = typer.Typer(
+    name="qair",
+    help="Quantom AI Runtime",
+    no_args_is_help=False,
+)
 
-def banner():
+models_app = typer.Typer(help="Manage local AI models")
 
-    print("\n" + "=" * 60)
-    print("        QAIR (Quantom AI Runtime)")
-    print("        TIOTAIROBOTIX")
-    print("=" * 60)
+app.add_typer(models_app, name="models")
 
-    print("\nLocal AI Runtime")
-    print("Type 'help' for commands.")
-    print("Type 'exit' to quit.\n")
-
-
-# ---------------------------------------------------------
-# Help
-# ---------------------------------------------------------
-
-def help_menu():
-
-    print("""
-Available Commands
-------------------
-
-help
-    Show this menu.
-
-info
-    Show runtime information.
-
-history
-    Show conversation history.
-
-reset
-    Clear current conversation.
-
-clear
-    Clear the screen.
-
-exit
-quit
-    Exit QAIR.
-""")
+console = Console()
 
 
-# ---------------------------------------------------------
-# Main
-# ---------------------------------------------------------
+# =========================================================
+# Root command
+# =========================================================
 
-def main():
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context):
+    """
+    Launch QAIR interactive mode when no subcommand is supplied.
+    """
 
-    banner()
+    if ctx.invoked_subcommand is not None:
+        return
 
-    print("Loading Engine...\n")
+    from runtime.chat.session import ChatSession
 
-    engine = LlamaEngine()
-
-    session = ChatSession(engine)
-
-    print("QAIR Ready.\n")
-
-    while True:
-
-        try:
-
-            user = input("QAIR > ").strip()
-
-            if not user:
-                continue
-
-            command = user.lower()
-
-            if command in ("exit", "quit"):
-
-                print("\nGoodbye.\n")
-                break
-
-            elif command == "help":
-
-                help_menu()
-                continue
-
-            elif command == "info":
-
-                print()
-                print(engine.info())
-                print()
-                continue
-
-            elif command == "history":
-
-                print()
-
-                history = session.history()
-
-                if not history:
-                    print("No conversation yet.")
-
-                else:
-
-                    for msg in history:
-
-                        print(
-                            f"{msg['role'].capitalize()}: {msg['content']}"
-                        )
-
-                print()
-                continue
-
-            elif command == "reset":
-
-                session.clear()
-
-                print("\nConversation cleared.\n")
-
-                continue
-
-            elif command == "clear":
-
-                os.system("clear")
-
-                banner()
-
-                continue
-
-            response = session.ask(user)
-
-            print()
-
-            print(response)
-
-            print()
-
-        except KeyboardInterrupt:
-
-            print("\n\nInterrupted.\n")
-
-            break
-
-        except Exception as e:
-
-            print(f"\nRuntime Error:\n{e}\n")
+    ChatSession().run()
 
 
-# ---------------------------------------------------------
-# Entry Point
-# ---------------------------------------------------------
+# =========================================================
+# MODELS
+# =========================================================
+
+@models_app.command("list")
+def list_models():
+    """
+    List installed GGUF models.
+    """
+
+    manager = ModelManager()
+
+    models = manager.list_models()
+
+    if not models:
+        console.print("[yellow]No models discovered.[/yellow]")
+        raise typer.Exit()
+
+    table = Table(title="Installed Models")
+
+    table.add_column("Name", style="cyan")
+    table.add_column("Size (MB)", justify="right")
+    table.add_column("Extension")
+
+    for model in models:
+        table.add_row(
+            model.name,
+            f"{model.size / (1024 * 1024):.1f}",
+            model.extension,
+        )
+
+    console.print(table)
+
+
+@models_app.command("active")
+def active_model():
+    """
+    Show active model.
+    """
+
+    manager = ModelManager()
+
+    model = manager.active_model()
+
+    if model is None:
+        console.print("[yellow]No active model selected.[/yellow]")
+        raise typer.Exit()
+
+    console.print(f"[green]Active Model:[/green] {model.name}")
+
+
+@models_app.command("use")
+def use_model(model_name: str):
+    """
+    Set active model.
+    """
+
+    manager = ModelManager()
+
+    manager.set_current_model(model_name)
+
+    console.print(f"[green]✓ Active model changed to[/green] {model_name}")
+
+
+@models_app.command("info")
+def model_info():
+    """
+    Display model summary.
+    """
+
+    manager = ModelManager()
+
+    summary = manager.summary()
+
+    table = Table(title="QAIR Model Summary")
+
+    table.add_column("Property")
+    table.add_column("Value")
+
+    for key, value in summary.items():
+        table.add_row(str(key), str(value))
+
+    console.print(table)
+
+
+@models_app.command("refresh")
+def refresh():
+    """
+    Rediscover installed models.
+    """
+
+    manager = ModelManager()
+
+    models = manager.list_models()
+
+    console.print(
+        f"[green]✓[/green] Discovered {len(models)} model(s)."
+    )
+
+
+# =========================================================
+# VERSION
+# =========================================================
+
+@app.command()
+def version():
+    """
+    Show QAIR version.
+    """
+
+    console.print("QAIR v0.4.0")
+
+
+# =========================================================
+# ENTRY POINT
+# =========================================================
+
+# =========================================================
+# ENTRY POINT
+# =========================================================
+
+def run():
+    """
+    Console entry point for the qair executable.
+    """
+
+    app()
+
 
 if __name__ == "__main__":
-
-    main()
+    run()

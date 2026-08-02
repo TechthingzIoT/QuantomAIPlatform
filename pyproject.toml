@@ -1,6 +1,6 @@
 [project]
 name = "qair"
-version = "0.3.0"
+version = "0.4.0"
 description = "Quantom AI Runtime"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -11,7 +11,7 @@ dependencies = [
     "rich",
     "pydantic",
     "pyyaml",
-    "python-dotenv"
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]
@@ -19,21 +19,26 @@ dev = [
     "pytest",
     "black",
     "ruff",
-    "pre-commit"
+    "pre-commit",
 ]
 
 [project.scripts]
-qair = "runtime.cli:main"
+qair = "runtime.cli:run"
 
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = [
+    "setuptools>=68",
+    "wheel",
+]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["runtime*"]
+include = [
+    "runtime*",
+]
 
 [tool.setuptools.package-data]
 runtime = [
@@ -42,8 +47,12 @@ runtime = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
+testpaths = [
+    "tests",
+]
+python_files = [
+    "test_*.py",
+]
 
 norecursedirs = [
     "third_party",
