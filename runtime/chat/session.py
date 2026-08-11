@@ -1,152 +1,327 @@
 """
-=========================================================
 QAIR Chat Session
 
-File:
-    runtime/chat/session.py
-
-Purpose:
-    Maintains conversation history for QAIR.
+Interactive runtime controller for QAIR.
 
 Responsibilities:
-    - Store conversation history
-    - Build prompts for the inference engine
-    - Preserve the system prompt
-    - Trim old history
-    - Provide session statistics
-
-Author:
-    TIOTAIROBOTIX
-=========================================================
+- Initialize the runtime
+- Load the active GGUF model
+- Maintain conversation history
+- Coordinate inference
+- Provide an interactive REPL
+- Gracefully shutdown
 """
 
-from typing import Dict, List, Optional
+from __future__ import annotations
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
+
+from runtime.chat.history import ConversationHistory
+from runtime.chat.message import ChatMessage, MessageRole
+from runtime.inference.engine import InferenceEngine
 
 
 class ChatSession:
     """
-    QAIR conversation manager.
+    Interactive QAIR runtime.
 
-    This class owns the conversation state while the
-    inference engine focuses only on generating responses.
+    Coordinates the inference engine, conversation history,
+    and terminal interface.
     """
 
-    def __init__(
-        self,
-        engine,
-        system_prompt: Optional[str] = None,
-        max_history: int = 20,
-    ):
+    def __init__(self):
+        self.console = Console()
+        self.engine = InferenceEngine()
+        self.history = ConversationHistory()
 
-        self.engine = engine
-        self.max_history = max_history
-        self.messages: List[Dict[str, str]] = []
+        # --------------------------------------------------
+        # QAIR system identity
+        # --------------------------------------------------
 
-        if system_prompt:
-            self.messages.append(
-                {
-                    "role": "system",
-                    "content": system_prompt,
-                }
+        self.system_message = ChatMessage(
+            role=MessageRole.SYSTEM,
+            content=(
+                "You are QAIR, the Quantom AI Runtime assistant "
+                "developed by TIOTAIROBOTIX. "
+                "You are a local AI assistant running through QAIR. "
+                "Answer clearly, accurately, and concisely."
+            ),
+        )
+
+        # System identity is always the first message.
+        self.history.add(self.system_message)
+
+        self.running = False
+
+    # ==================================================
+    # Banner
+    # ==================================================
+
+    def banner(self) -> None:
+        """Display the QAIR startup banner."""
+
+        self.console.print()
+
+        self.console.print(
+            Panel.fit(
+                "[bold cyan]QAIR v0.5.0[/bold cyan]\n"
+                "Quantom AI Runtime\n\n"
+                "[green]Powered by TIOTAIROBOTIX[/green]",
+                border_style="cyan",
             )
+        )
 
-    # --------------------------------------------------
+        self.console.print()
+
+    # ==================================================
+    # Startup / Shutdown
+    # ==================================================
+
+    def startup(self) -> None:
+        """Initialize the runtime."""
+
+        self.banner()
+
+        self.console.print(
+            "[cyan]Loading active model...[/cyan]"
+        )
+
+        self.engine.load()
+
+        model_name = (
+            self.engine.model.name
+            if self.engine.model
+            else "Unknown"
+        )
+
+        self.console.print(
+            f"[green]✓ Loaded:[/green] {model_name}"
+        )
+
+        self.console.print()
+
+        self.console.print(
+            "[dim]Type '/help' for commands.[/dim]"
+        )
+
+        self.console.print(
+            "[dim]Type 'exit' or 'quit' to leave QAIR.[/dim]"
+        )
+
+        self.console.print()
+
+        self.running = True
+
+    def shutdown(self) -> None:
+        """Shutdown QAIR cleanly."""
+
+        self.console.print()
+
+        self.console.print(
+            "[yellow]Shutting down QAIR...[/yellow]"
+        )
+
+        self.engine.unload()
+
+        self.running = False
+
+        self.console.print(
+            "[green]Session closed.[/green]"
+        )
+
+    # ==================================================
+    # Conversation
+    # ==================================================
 
     def ask(self, prompt: str) -> str:
+        """
+        Send a user message to the inference engine.
 
-        self.messages.append(
-            {
-                "role": "user",
-                "content": prompt,
-            }
+        The complete structured conversation history,
+        including the QAIR system identity, is passed
+        to llama.cpp.
+        """
+
+        user_message = ChatMessage(
+            role=MessageRole.USER,
+            content=prompt,
         )
 
-        self._trim_history()
+        self.history.add(user_message)
 
-        conversation = self._build_prompt()
+        messages = self.history.to_messages()
 
-        reply = self.engine.chat(conversation)
+        reply = self.engine.generate(messages)
 
-        self.messages.append(
-            {
-                "role": "assistant",
-                "content": reply,
-            }
+        assistant_message = ChatMessage(
+            role=MessageRole.ASSISTANT,
+            content=reply,
         )
+
+        self.history.add(assistant_message)
 
         return reply
 
-    # --------------------------------------------------
+    # ==================================================
+    # Utilities
+    # ==================================================
 
-    def _build_prompt(self) -> str:
+    def clear(self) -> None:
+        """
+        Clear conversation history while preserving
+        the QAIR system identity.
+        """
 
-        prompt = ""
+        self.history.clear()
 
-        for msg in self.messages:
+        self.history.add(self.system_message)
 
-            if msg["role"] == "system":
-                prompt += f"System: {msg['content']}\n"
+        self.console.print(
+            "[green]Conversation cleared.[/green]"
+        )
 
-            elif msg["role"] == "user":
-                prompt += f"User: {msg['content']}\n"
+    def stats(self) -> None:
+        """Display runtime statistics."""
 
-            elif msg["role"] == "assistant":
-                prompt += f"Assistant: {msg['content']}\n"
+        summary = self.engine.summary()
 
-        prompt += "Assistant:"
+        self.console.print()
 
-        return prompt
+        self.console.print(
+            Panel.fit(
+                "\n".join(
+                    [
+                        f"Model       : {summary['model']}",
+                        f"Loaded      : {summary['loaded']}",
+                        f"Context     : {summary['context']}",
+                        f"GPU Layers  : {summary['gpu_layers']}",
+                        f"Temperature : {summary['temperature']}",
+                        f"Top P       : {summary['top_p']}",
+                        f"Messages    : {len(self.history)}",
+                    ]
+                ),
+                title="QAIR Runtime",
+                border_style="cyan",
+            )
+        )
 
-    # --------------------------------------------------
+    def show_history(self) -> None:
+        """Display conversation history."""
 
-    def _trim_history(self):
-
-        if len(self.messages) <= self.max_history:
+        if self.history.empty():
+            self.console.print(
+                "[yellow]History is empty.[/yellow]"
+            )
             return
 
-        system = []
+        self.console.print()
 
-        if self.messages and self.messages[0]["role"] == "system":
-            system = [self.messages[0]]
+        for message in self.history:
+            self.console.print(str(message))
 
-        history = self.messages[-(self.max_history - len(system)):]
+        self.console.print()
 
-        self.messages = system + history
+    # ==================================================
+    # Runtime Commands
+    # ==================================================
 
-    # --------------------------------------------------
+    def command(self, text: str) -> bool:
+        """
+        Execute built-in commands.
 
-    def clear(self):
+        Returns True if the command was handled.
+        """
 
-        system = []
+        cmd = text.strip().lower()
 
-        if self.messages and self.messages[0]["role"] == "system":
-            system = [self.messages[0]]
+        if cmd in {"exit", "quit"}:
+            self.running = False
+            return True
 
-        self.messages = system
+        if cmd == "/clear":
+            self.clear()
+            return True
 
-    # --------------------------------------------------
+        if cmd == "/history":
+            self.show_history()
+            return True
 
-    def history(self):
+        if cmd == "/stats":
+            self.stats()
+            return True
 
-        return self.messages
+        if cmd == "/help":
+            self.console.print()
 
-    # --------------------------------------------------
+            self.console.print(
+                Panel.fit(
+                    "\n".join(
+                        [
+                            "/help      Show commands",
+                            "/history   Show conversation",
+                            "/stats     Runtime information",
+                            "/clear     Clear conversation",
+                            "exit       Quit QAIR",
+                        ]
+                    ),
+                    title="QAIR Commands",
+                    border_style="green",
+                )
+            )
 
-    def stats(self):
+            return True
 
-        users = sum(
-            1 for m in self.messages
-            if m["role"] == "user"
-        )
+        return False
 
-        assistants = sum(
-            1 for m in self.messages
-            if m["role"] == "assistant"
-        )
+    # ==================================================
+    # Interactive Runtime
+    # ==================================================
 
-        return {
-            "messages": len(self.messages),
-            "user_messages": users,
-            "assistant_messages": assistants,
-            "max_history": self.max_history,
-        }
+    def run(self) -> None:
+        """Launch the interactive QAIR runtime."""
+
+        self.startup()
+
+        try:
+            while self.running:
+
+                prompt = Prompt.ask(
+                    "[bold cyan]You[/bold cyan]"
+                ).strip()
+
+                if not prompt:
+                    continue
+
+                if self.command(prompt):
+                    continue
+
+                response = self.ask(prompt)
+
+                self.console.print()
+
+                self.console.print(
+                    Panel(
+                        response,
+                        title="QAIR",
+                        border_style="green",
+                    )
+                )
+
+                self.console.print()
+
+        except KeyboardInterrupt:
+
+            self.console.print()
+
+            self.console.print(
+                "[yellow]Interrupted by user.[/yellow]"
+            )
+
+        finally:
+            self.shutdown()
+
+
+if __name__ == "__main__":
+    ChatSession().run()

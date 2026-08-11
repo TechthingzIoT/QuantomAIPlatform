@@ -1,162 +1,151 @@
 """
 =========================================================
-QAIR (Quantom AI Runtime)
+QAIR Inference Engine
+=========================================================
 
-File:
-    runtime/inference/engine.py
+Thin abstraction over the underlying language model.
 
-Purpose:
-    Core inference engine responsible for loading local
-    GGUF language models and generating responses.
+Responsibilities
+----------------
+• Load the active model
+• Generate responses
+• Reload models
+• Expose runtime information
 
 Author:
     TIOTAIROBOTIX
 =========================================================
 """
 
-import time
-from pathlib import Path
-from typing import Optional, List, Dict
+from __future__ import annotations
 
 from llama_cpp import Llama
 
-from runtime.config.loader import load_settings
+from runtime.config.settings import settings
+from runtime.models.manager import ModelManager
+from runtime.models.model import Model
 
 
-class LlamaEngine:
+class InferenceEngine:
     """
-    QAIR Local Language Model Engine.
+    QAIR inference engine.
 
-    Loads a GGUF model using llama.cpp and exposes a simple
-    chat interface for the rest of QAIR.
+    This class owns the loaded language model and provides
+    a simple interface for text generation.
     """
 
-    def __init__(
-        self,
-        model_path: Optional[str] = None,
-        n_ctx: Optional[int] = None,
-        n_gpu_layers: Optional[int] = None,
-    ):
+    def __init__(self):
+        self.settings = settings
+        self.manager = ModelManager()
 
-        # Load runtime configuration
-        self.settings = load_settings()
+        self._model: Llama | None = None
+        self._model_info: Model | None = None
 
-        self.model_path = model_path or self.settings.model_path
-        self.n_ctx = n_ctx or self.settings.context_size
-        self.n_gpu_layers = (
-            n_gpu_layers
-            if n_gpu_layers is not None
-            else self.settings.gpu_layers
-        )
+    # ==================================================
+    # Loading
+    # ==================================================
 
-        model = Path(self.model_path)
+    def load(self) -> None:
+        """
+        Load the currently active model.
+        """
 
-        if not model.exists():
-            raise FileNotFoundError(model)
+        active = self.manager.active_model()
 
-        print("\n============================================================")
-        print("QAIR Runtime")
-        print("============================================================")
-        print(f"Model      : {model.name}")
-        print(f"Context    : {self.n_ctx}")
-        print(f"GPU Layers : {self.n_gpu_layers}")
-        print()
+        if active is None:
+            raise RuntimeError("No active model selected.")
 
-        start = time.time()
+        self._model_info = active
 
-        self.llm = Llama(
-            model_path=str(model),
-            n_ctx=self.n_ctx,
-            n_gpu_layers=self.n_gpu_layers,
+        self._model = Llama(
+            model_path=str(active.path),
+            n_ctx=self.settings.context_size,
+            n_gpu_layers=self.settings.gpu_layers,
             verbose=self.settings.verbose,
         )
 
-        elapsed = time.time() - start
+    def reload(self) -> None:
+        """
+        Reload the active model.
+        """
 
-        print(f"✓ Model loaded in {elapsed:.2f} sec\n")
+        self.unload()
+        self.load()
 
-    def chat(
+    def unload(self) -> None:
+        """
+        Release the loaded model.
+        """
+
+        self._model = None
+        self._model_info = None
+
+    # ==================================================
+    # Status
+    # ==================================================
+
+    @property
+    def loaded(self) -> bool:
+        """
+        Whether a model is currently loaded.
+        """
+
+        return self._model is not None
+
+    @property
+    def model(self) -> Model | None:
+        """
+        Return loaded model metadata.
+        """
+
+        return self._model_info
+
+    # ==================================================
+    # Generation
+    # ==================================================
+
+    def generate(
         self,
-        prompt: Optional[str] = None,
-        messages: Optional[List[Dict[str, str]]] = None,
-        system_prompt: Optional[str] = None,
-        temperature: Optional[float] = None,
-        top_p: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        messages: list[dict],
+        *,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
     ) -> str:
         """
-        Generate a chat response.
-
-        Supports either:
-
-            prompt="Hello"
-
-        or
-
-            messages=[
-                {"role": "system", "content": "..."},
-                {"role": "user", "content": "..."},
-            ]
+        Generate a response using the model's native
+        chat completion API.
         """
 
-        if messages is None:
+        if not self.loaded:
+            self.load()
 
-            messages = []
+        assert self._model is not None
 
-            if system_prompt:
-                messages.append(
-                    {
-                        "role": "system",
-                        "content": system_prompt,
-                    }
-                )
-
-            if prompt:
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": prompt,
-                    }
-                )
-
-        print("Generating...\n")
-
-        start = time.time()
-
-        output = self.llm.create_chat_completion(
+        response = self._model.create_chat_completion(
             messages=messages,
-            temperature=(
-                temperature
-                if temperature is not None
-                else self.settings.temperature
-            ),
-            top_p=(
-                top_p
-                if top_p is not None
-                else self.settings.top_p
-            ),
-            max_tokens=(
-                max_tokens
-                if max_tokens is not None
-                else self.settings.max_tokens
-            ),
+            max_tokens=max_tokens or self.settings.max_tokens,
+            temperature=temperature or self.settings.temperature,
+            top_p=top_p or self.settings.top_p,
         )
 
-        elapsed = time.time() - start
+        return response["choices"][0]["message"]["content"].strip()
 
-        print("------------------------------------------------------------")
-        print(f"Inference Time : {elapsed:.2f} sec")
-        print("------------------------------------------------------------")
+    # ==================================================
+    # Runtime Information
+    # ==================================================
 
-        return output["choices"][0]["message"]["content"]
-
-    def info(self):
+    def summary(self) -> dict:
         """
-        Return runtime information.
+        Runtime summary.
         """
 
         return {
-            "model": Path(self.model_path).name,
-            "context": self.n_ctx,
-            "gpu_layers": self.n_gpu_layers,
+            "loaded": self.loaded,
+            "model": self.model.name if self.model else None,
+            "context": self.settings.context_size,
+            "gpu_layers": self.settings.gpu_layers,
+            "temperature": self.settings.temperature,
+            "top_p": self.settings.top_p,
+            "max_tokens": self.settings.max_tokens,
         }
