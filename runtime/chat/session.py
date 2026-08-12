@@ -7,6 +7,7 @@ Responsibilities:
 - Initialize the runtime
 - Load the active GGUF model
 - Maintain conversation history
+- Manage system prompts
 - Coordinate inference
 - Provide an interactive REPL
 - Gracefully shutdown
@@ -21,6 +22,7 @@ from rich.prompt import Prompt
 from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.inference.engine import InferenceEngine
+from runtime.prompts.selection import PromptSelector
 
 
 class ChatSession:
@@ -28,29 +30,43 @@ class ChatSession:
     Interactive QAIR runtime.
 
     Coordinates the inference engine, conversation history,
-    and terminal interface.
+    prompt selection, and terminal interface.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        prompt_selector: PromptSelector | None = None,
+        prompt_name: str | None = None,
+    ):
         self.console = Console()
+
         self.engine = InferenceEngine()
+
         self.history = ConversationHistory()
 
         # --------------------------------------------------
-        # QAIR system identity
+        # Prompt selection
         # --------------------------------------------------
+
+        self.prompt_selector = (
+            prompt_selector or PromptSelector()
+        )
+
+        self.active_prompt = (
+            prompt_name or self.prompt_selector.DEFAULT_PROMPT
+        )
+
+        # Validate and load selected prompt.
+        system_prompt = self.prompt_selector.select(
+            self.active_prompt
+        )
 
         self.system_message = ChatMessage(
             role=MessageRole.SYSTEM,
-            content=(
-                "You are QAIR, the Quantom AI Runtime assistant "
-                "developed by TIOTAIROBOTIX. "
-                "You are a local AI assistant running through QAIR. "
-                "Answer clearly, accurately, and concisely."
-            ),
+            content=system_prompt,
         )
 
-        # System identity is always the first message.
+        # System prompt is always the first message.
         self.history.add(self.system_message)
 
         self.running = False
@@ -68,6 +84,7 @@ class ChatSession:
             Panel.fit(
                 "[bold cyan]QAIR v0.5.0[/bold cyan]\n"
                 "Quantom AI Runtime\n\n"
+                f"[yellow]Prompt:[/yellow] {self.active_prompt}\n"
                 "[green]Powered by TIOTAIROBOTIX[/green]",
                 border_style="cyan",
             )
@@ -132,6 +149,70 @@ class ChatSession:
         )
 
     # ==================================================
+    # Prompt Management
+    # ==================================================
+
+    def set_prompt(self, name: str) -> None:
+        """
+        Switch the active system prompt.
+
+        Switching prompts resets the conversation because
+        previous messages may have been generated under a
+        different domain/system instruction.
+        """
+
+        name = name.strip().lower()
+
+        if not name:
+            raise ValueError("Prompt name cannot be empty.")
+
+        if not self.prompt_selector.exists(name):
+            available = ", ".join(
+                self.prompt_selector.available()
+            )
+
+            raise ValueError(
+                f"Unknown prompt '{name}'. "
+                f"Available prompts: {available}"
+            )
+
+        system_prompt = self.prompt_selector.select(name)
+
+        self.active_prompt = name
+
+        self.system_message = ChatMessage(
+            role=MessageRole.SYSTEM,
+            content=system_prompt,
+        )
+
+        self.history.clear()
+
+        self.history.add(self.system_message)
+
+    def show_prompts(self) -> None:
+        """Display available system prompts."""
+
+        available = self.prompt_selector.available()
+
+        self.console.print()
+
+        self.console.print(
+            Panel.fit(
+                "\n".join(
+                    [
+                        f"{'* ' if name == self.active_prompt else '  '}"
+                        f"{name}"
+                        for name in available
+                    ]
+                ),
+                title="QAIR Prompts",
+                border_style="cyan",
+            )
+        )
+
+        self.console.print()
+
+    # ==================================================
     # Conversation
     # ==================================================
 
@@ -140,7 +221,7 @@ class ChatSession:
         Send a user message to the inference engine.
 
         The complete structured conversation history,
-        including the QAIR system identity, is passed
+        including the active system prompt, is passed
         to llama.cpp.
         """
 
@@ -171,7 +252,7 @@ class ChatSession:
     def clear(self) -> None:
         """
         Clear conversation history while preserving
-        the QAIR system identity.
+        the active system prompt.
         """
 
         self.history.clear()
@@ -200,6 +281,7 @@ class ChatSession:
                         f"Temperature : {summary['temperature']}",
                         f"Top P       : {summary['top_p']}",
                         f"Messages    : {len(self.history)}",
+                        f"Prompt      : {self.active_prompt}",
                     ]
                 ),
                 title="QAIR Runtime",
@@ -234,23 +316,74 @@ class ChatSession:
         Returns True if the command was handled.
         """
 
-        cmd = text.strip().lower()
+        raw = text.strip()
+
+        if not raw:
+            return False
+
+        cmd = raw.lower()
+
+        # --------------------------------------------------
+        # Exit
+        # --------------------------------------------------
 
         if cmd in {"exit", "quit"}:
             self.running = False
             return True
 
+        # --------------------------------------------------
+        # Clear
+        # --------------------------------------------------
+
         if cmd == "/clear":
             self.clear()
             return True
+
+        # --------------------------------------------------
+        # History
+        # --------------------------------------------------
 
         if cmd == "/history":
             self.show_history()
             return True
 
+        # --------------------------------------------------
+        # Stats
+        # --------------------------------------------------
+
         if cmd == "/stats":
             self.stats()
             return True
+
+        # --------------------------------------------------
+        # Prompt
+        # --------------------------------------------------
+
+        if cmd == "/prompt":
+            self.show_prompts()
+            return True
+
+        if cmd.startswith("/prompt "):
+            prompt_name = raw.split(maxsplit=1)[1]
+
+            try:
+                self.set_prompt(prompt_name)
+
+                self.console.print(
+                    f"[green]✓ Prompt switched to:[/green] "
+                    f"{self.active_prompt}"
+                )
+
+            except ValueError as exc:
+                self.console.print(
+                    f"[red]✗ {exc}[/red]"
+                )
+
+            return True
+
+        # --------------------------------------------------
+        # Help
+        # --------------------------------------------------
 
         if cmd == "/help":
             self.console.print()
@@ -259,11 +392,13 @@ class ChatSession:
                 Panel.fit(
                     "\n".join(
                         [
-                            "/help      Show commands",
-                            "/history   Show conversation",
-                            "/stats     Runtime information",
-                            "/clear     Clear conversation",
-                            "exit       Quit QAIR",
+                            "/help              Show commands",
+                            "/prompt            List available prompts",
+                            "/prompt <name>     Switch system prompt",
+                            "/history           Show conversation",
+                            "/stats             Runtime information",
+                            "/clear             Clear conversation",
+                            "exit               Quit QAIR",
                         ]
                     ),
                     title="QAIR Commands",

@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.table import Table
 
 from runtime.models.manager import ModelManager
-from runtime.models.registry import set_active_model
+
 
 app = typer.Typer(
     name="qair",
@@ -25,7 +25,9 @@ app = typer.Typer(
     no_args_is_help=False,
 )
 
-models_app = typer.Typer(help="Manage local AI models")
+models_app = typer.Typer(
+    help="Manage local AI models"
+)
 
 app.add_typer(models_app, name="models")
 
@@ -33,13 +35,22 @@ console = Console()
 
 
 # =========================================================
-# Root command
+# ROOT COMMAND
 # =========================================================
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context):
+def main(
+    ctx: typer.Context,
+    prompt: str = typer.Option(
+        "assistant",
+        "--prompt",
+        "-p",
+        help="System prompt/domain to use.",
+    ),
+):
     """
-    Launch QAIR interactive mode when no subcommand is supplied.
+    Launch QAIR interactive mode when no subcommand
+    is supplied.
     """
 
     if ctx.invoked_subcommand is not None:
@@ -47,7 +58,7 @@ def main(ctx: typer.Context):
 
     from runtime.chat.session import ChatSession
 
-    ChatSession().run()
+    ChatSession(prompt_name=prompt).run()
 
 
 # =========================================================
@@ -65,7 +76,9 @@ def list_models():
     models = manager.list_models()
 
     if not models:
-        console.print("[yellow]No models discovered.[/yellow]")
+        console.print(
+            "[yellow]No models discovered.[/yellow]"
+        )
         raise typer.Exit()
 
     table = Table(title="Installed Models")
@@ -95,10 +108,14 @@ def active_model():
     model = manager.active_model()
 
     if model is None:
-        console.print("[yellow]No active model selected.[/yellow]")
+        console.print(
+            "[yellow]No active model selected.[/yellow]"
+        )
         raise typer.Exit()
 
-    console.print(f"[green]Active Model:[/green] {model.name}")
+    console.print(
+        f"[green]Active Model:[/green] {model.name}"
+    )
 
 
 @models_app.command("use")
@@ -111,7 +128,10 @@ def use_model(model_name: str):
 
     manager.set_current_model(model_name)
 
-    console.print(f"[green]✓ Active model changed to[/green] {model_name}")
+    console.print(
+        f"[green]✓ Active model changed to[/green] "
+        f"{model_name}"
+    )
 
 
 @models_app.command("info")
@@ -130,7 +150,10 @@ def model_info():
     table.add_column("Value")
 
     for key, value in summary.items():
-        table.add_row(str(key), str(value))
+        table.add_row(
+            str(key),
+            str(value),
+        )
 
     console.print(table)
 
@@ -146,7 +169,8 @@ def refresh():
     models = manager.list_models()
 
     console.print(
-        f"[green]✓[/green] Discovered {len(models)} model(s)."
+        f"[green]✓[/green] Discovered "
+        f"{len(models)} model(s)."
     )
 
 
@@ -160,12 +184,8 @@ def version():
     Show QAIR version.
     """
 
-    console.print("QAIR v0.4.0")
+    console.print("QAIR v0.5.0")
 
-
-# =========================================================
-# ENTRY POINT
-# =========================================================
 
 # =========================================================
 # ENTRY POINT

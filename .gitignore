@@ -88,3 +88,9 @@ third_party/
 # OS
 # ==========================================
 Thumbs.db
+
+# Runtime-generated files
+history.json
+
+# Legacy examples
+examples/

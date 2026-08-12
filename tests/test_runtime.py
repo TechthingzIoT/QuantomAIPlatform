@@ -1,0 +1,305 @@
+from unittest.mock import MagicMock
+
+import pytest
+
+from runtime.core.runtime import QAIRRuntime
+
+
+def make_runtime():
+    """Create an isolated QAIRRuntime with mocked dependencies."""
+
+    model_manager = MagicMock()
+    engine = MagicMock()
+    prompt_selector = MagicMock()
+
+    # --------------------------------------------------
+    # Mock model
+    # --------------------------------------------------
+
+    model = MagicMock()
+    model.name = "test-model.gguf"
+
+    model_manager.list_models.return_value = [model]
+    model_manager.active_model.return_value = model
+    model_manager.activate.return_value = model
+
+    model_manager.summary.return_value = {
+        "installed_models": 1,
+        "active_model": "test-model.gguf",
+        "total_size": 123456789,
+    }
+
+    # --------------------------------------------------
+    # Mock inference engine
+    # --------------------------------------------------
+
+    engine.loaded = False
+
+    engine.summary.return_value = {
+        "loaded": False,
+        "model": "test-model.gguf",
+        "context": 2048,
+        "gpu_layers": 18,
+        "temperature": 0.3,
+        "top_p": 0.95,
+        "max_tokens": 256,
+    }
+
+    # --------------------------------------------------
+    # Mock prompt selector
+    # --------------------------------------------------
+
+    prompt_selector.DEFAULT_PROMPT = "assistant"
+
+    prompt_selector.available.return_value = [
+        "assistant",
+        "embedded",
+        "robotics",
+        "agriculture",
+        "coding",
+    ]
+
+    prompt_selector.select.return_value = "Assistant system prompt"
+
+    return (
+        QAIRRuntime(
+            model_manager=model_manager,
+            engine=engine,
+            prompt_selector=prompt_selector,
+        ),
+        model_manager,
+        engine,
+        prompt_selector,
+    )
+
+
+# ============================================================
+# Initialization
+# ============================================================
+
+
+def test_runtime_initialization():
+    runtime, _, _, _ = make_runtime()
+
+    assert runtime.running is False
+
+
+# ============================================================
+# Startup
+# ============================================================
+
+
+def test_runtime_start():
+    runtime, manager, engine, _ = make_runtime()
+
+    runtime.start()
+
+    manager.list_models.assert_called_once()
+    manager.active_model.assert_called()
+    engine.load.assert_called_once()
+
+    assert runtime.running is True
+
+
+def test_runtime_start_is_idempotent():
+    runtime, _, engine, _ = make_runtime()
+
+    runtime.start()
+    runtime.start()
+
+    engine.load.assert_called_once()
+
+
+def test_runtime_start_without_models_fails():
+    runtime, manager, _, _ = make_runtime()
+
+    manager.list_models.return_value = []
+
+    with pytest.raises(
+        RuntimeError,
+        match="No AI models discovered",
+    ):
+        runtime.start()
+
+
+def test_runtime_start_without_active_model_fails():
+    runtime, manager, _, _ = make_runtime()
+
+    manager.active_model.return_value = None
+
+    with pytest.raises(
+        RuntimeError,
+        match="No active model selected",
+    ):
+        runtime.start()
+
+
+# ============================================================
+# Shutdown
+# ============================================================
+
+
+def test_runtime_stop():
+    runtime, _, engine, _ = make_runtime()
+
+    runtime.start()
+    runtime.stop()
+
+    engine.unload.assert_called_once()
+
+    assert runtime.running is False
+
+
+def test_runtime_stop_is_idempotent():
+    runtime, _, engine, _ = make_runtime()
+
+    runtime.stop()
+
+    engine.unload.assert_not_called()
+
+
+# ============================================================
+# Runtime State
+# ============================================================
+
+
+def test_runtime_loaded():
+    runtime, _, engine, _ = make_runtime()
+
+    engine.loaded = True
+
+    assert runtime.loaded is True
+
+
+def test_runtime_active_model():
+    runtime, manager, _, _ = make_runtime()
+
+    assert runtime.active_model is manager.active_model.return_value
+
+
+# ============================================================
+# Model Management
+# ============================================================
+
+
+def test_runtime_refresh_models():
+    runtime, manager, _, _ = make_runtime()
+
+    runtime.refresh_models()
+
+    manager.refresh.assert_called_once()
+
+
+def test_runtime_list_models():
+    runtime, manager, _, _ = make_runtime()
+
+    models = runtime.list_models()
+
+    assert models == manager.list_models.return_value
+
+
+def test_runtime_activate_model():
+    runtime, manager, _, _ = make_runtime()
+
+    model = runtime.activate_model("test-model.gguf")
+
+    manager.activate.assert_called_once_with(
+        "test-model.gguf"
+    )
+
+    assert model is manager.activate.return_value
+
+
+def test_runtime_activate_model_reloads_when_running():
+    runtime, manager, engine, _ = make_runtime()
+
+    runtime.start()
+
+    # Clear calls generated by startup.
+    engine.reset_mock()
+
+    runtime.activate_model("test-model.gguf")
+
+    manager.activate.assert_called_once_with(
+        "test-model.gguf"
+    )
+
+    engine.reload.assert_called_once()
+
+
+# ============================================================
+# Prompt Management
+# ============================================================
+
+
+def test_runtime_available_prompts():
+    runtime, _, _, selector = make_runtime()
+
+    prompts = runtime.available_prompts()
+
+    assert prompts == selector.available.return_value
+
+
+def test_runtime_get_prompt():
+    runtime, _, _, selector = make_runtime()
+
+    selector.select.return_value = (
+        "Embedded systems prompt"
+    )
+
+    prompt = runtime.get_prompt("embedded")
+
+    selector.select.assert_called_once_with(
+        "embedded"
+    )
+
+    assert prompt == "Embedded systems prompt"
+
+
+# ============================================================
+# Runtime Summary
+# ============================================================
+
+
+def test_runtime_summary():
+    runtime, manager, engine, _ = make_runtime()
+
+    summary = runtime.summary()
+
+    # Runtime state
+    assert summary["running"] is False
+    assert summary["loaded"] is False
+
+    # Model manager information
+    assert summary["active_model"] == "test-model.gguf"
+    assert summary["installed_models"] == 1
+    assert summary["total_model_size"] == 123456789
+
+    # Inference engine information
+    assert summary["model"] == "test-model.gguf"
+    assert summary["context"] == 2048
+    assert summary["gpu_layers"] == 18
+    assert summary["temperature"] == 0.3
+    assert summary["top_p"] == 0.95
+    assert summary["max_tokens"] == 256
+
+    # Verify the runtime actually queried its dependencies.
+    manager.summary.assert_called_once()
+    engine.summary.assert_called_once()
+
+
+# ============================================================
+# Context Manager
+# ============================================================
+
+
+def test_runtime_context_manager():
+    runtime, _, engine, _ = make_runtime()
+
+    with runtime:
+        assert runtime.running is True
+
+    engine.load.assert_called_once()
+    engine.unload.assert_called_once()
+
+    assert runtime.running is False
