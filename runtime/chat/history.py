@@ -1,23 +1,16 @@
 """
-=========================================================
 QAIR Conversation History
-=========================================================
 
-Maintains the complete conversation history for a chat
-session.
+Maintains the complete conversation history for a chat session.
 
 Responsibilities
 ----------------
-• Store messages
-• Append new messages
-• Export history
-• Import history
-• Clear history
-• Build prompts for inference
-
-Author:
-    TIOTAIROBOTIX
-=========================================================
+- Store messages
+- Append new messages
+- Export history
+- Import history
+- Clear history
+- Build messages for inference
 """
 
 from __future__ import annotations
@@ -29,11 +22,9 @@ from runtime.chat.message import ChatMessage
 
 
 class ConversationHistory:
-    """
-    Conversation history container.
-    """
+    """Container for an ordered conversation history."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.messages: list[ChatMessage] = []
 
     # ==================================================
@@ -41,21 +32,23 @@ class ConversationHistory:
     # ==================================================
 
     def add(self, message: ChatMessage) -> None:
-        """
-        Append a message.
-        """
+        """Append a message to the conversation."""
+
+        if not isinstance(message, ChatMessage):
+            raise TypeError(
+                "Conversation history only accepts ChatMessage objects."
+            )
+
         self.messages.append(message)
 
     def clear(self) -> None:
-        """
-        Remove every message.
-        """
+        """Remove all messages from the conversation."""
+
         self.messages.clear()
 
     def last(self) -> ChatMessage | None:
-        """
-        Return the latest message.
-        """
+        """Return the most recent message, or None if empty."""
+
         if not self.messages:
             return None
 
@@ -66,42 +59,50 @@ class ConversationHistory:
     # ==================================================
 
     def count(self) -> int:
+        """Return the number of messages."""
+
         return len(self.messages)
 
     def empty(self) -> bool:
-        return len(self.messages) == 0
+        """Return True when the conversation contains no messages."""
+
+        return not self.messages
 
     # ==================================================
     # Serialization
     # ==================================================
 
-    def to_dict(self) -> list[dict]:
-        """
-        Export history.
-        """
-        return [m.to_dict() for m in self.messages]
+    def to_dict(self) -> list[dict[str, str]]:
+        """Serialize the conversation to dictionaries."""
 
-    def to_messages(self) -> list[dict]:
+        return [message.to_dict() for message in self.messages]
+
+    def to_messages(self) -> list[dict[str, str]]:
         """
-        Return the conversation in the format expected by
-        llama.cpp's chat completion API.
+        Return messages in the format expected by
+        llama.cpp chat completion APIs.
         """
-        return [
-            message.to_dict()
-            for message in self.messages
-        ]
+
+        return self.to_dict()
 
     @classmethod
     def from_dict(
         cls,
-        data: list[dict],
+        data: list[dict[str, str]],
     ) -> "ConversationHistory":
-        """
-        Build history from dictionaries.
-        """
+        """Create conversation history from serialized messages."""
+
+        if not isinstance(data, list):
+            raise TypeError("Conversation history must be a list.")
+
         history = cls()
 
         for item in data:
+            if not isinstance(item, dict):
+                raise TypeError(
+                    "Each conversation message must be a dictionary."
+                )
+
             history.add(ChatMessage.from_dict(item))
 
         return history
@@ -111,15 +112,14 @@ class ConversationHistory:
     # ==================================================
 
     def save(self, path: str | Path) -> None:
-        """
-        Save history as JSON.
-        """
+        """Save conversation history as JSON."""
+
         path = Path(path)
 
-        with open(path, "w", encoding="utf-8") as f:
+        with path.open("w", encoding="utf-8") as file:
             json.dump(
                 self.to_dict(),
-                f,
+                file,
                 indent=4,
                 ensure_ascii=False,
             )
@@ -129,13 +129,17 @@ class ConversationHistory:
         cls,
         path: str | Path,
     ) -> "ConversationHistory":
-        """
-        Load history from JSON.
-        """
+        """Load conversation history from JSON."""
+
         path = Path(path)
 
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Conversation history not found: {path}"
+            )
+
+        with path.open("r", encoding="utf-8") as file:
+            data = json.load(file)
 
         return cls.from_dict(data)
 
@@ -145,17 +149,14 @@ class ConversationHistory:
 
     def prompt(self) -> str:
         """
-        Legacy prompt builder.
+        Build the legacy text representation.
 
         Retained for backward compatibility.
-        New inference should use to_messages().
+
+        New inference code should use ``to_messages()``.
         """
-        lines = []
 
-        for message in self.messages:
-            lines.append(str(message))
-
-        return "\n".join(lines)
+        return "\n".join(str(message) for message in self.messages)
 
     # ==================================================
     # Convenience
@@ -167,5 +168,5 @@ class ConversationHistory:
     def __iter__(self):
         return iter(self.messages)
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int) -> ChatMessage:
         return self.messages[index]
