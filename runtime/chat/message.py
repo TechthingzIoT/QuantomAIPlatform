@@ -1,19 +1,13 @@
 """
-=========================================================
 QAIR Chat Message
-=========================================================
 
 Conversation message models used by the QAIR runtime.
 
 Responsibilities
 ----------------
-• Represent chat messages
-• Standardize conversation roles
-• Provide serialization helpers
-
-Author:
-    TIOTAIROBOTIX
-=========================================================
+- Represent chat messages
+- Standardize conversation roles
+- Provide serialization helpers
 """
 
 from __future__ import annotations
@@ -23,9 +17,7 @@ from enum import Enum
 
 
 class MessageRole(str, Enum):
-    """
-    Supported conversation roles.
-    """
+    """Supported conversation roles."""
 
     SYSTEM = "system"
     USER = "user"
@@ -34,21 +26,13 @@ class MessageRole(str, Enum):
 
 @dataclass(slots=True)
 class ChatMessage:
-    """
-    Represents a single conversation message.
-    """
+    """Represents a single conversation message."""
 
     role: MessageRole
     content: str
 
     def to_dict(self) -> dict[str, str]:
-        """
-        Convert the message to a dictionary.
-
-        Returns
-        -------
-        dict[str, str]
-        """
+        """Convert the message to a serializable dictionary."""
 
         return {
             "role": self.role.value,
@@ -57,9 +41,17 @@ class ChatMessage:
 
     @classmethod
     def from_dict(cls, data: dict[str, str]) -> "ChatMessage":
-        """
-        Create a ChatMessage from a dictionary.
-        """
+        """Create a ChatMessage from a dictionary."""
+
+        if "role" not in data:
+            raise ValueError(
+                "Message data missing required field: 'role'."
+            )
+
+        if "content" not in data:
+            raise ValueError(
+                "Message data missing required field: 'content'."
+            )
 
         return cls(
             role=MessageRole(data["role"]),
@@ -67,8 +59,6 @@ class ChatMessage:
         )
 
     def __str__(self) -> str:
-        """
-        Human-readable representation.
-        """
+        """Return a human-readable representation."""
 
         return f"{self.role.value}: {self.content}"
