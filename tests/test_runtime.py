@@ -1,3 +1,15 @@
+"""
+=========================================================
+QAIR Runtime Tests
+=========================================================
+
+Test suite for central QAIR runtime orchestration layer.
+
+Author:
+    TIOTAIROBOTIX
+=========================================================
+"""
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -74,7 +86,7 @@ def make_runtime():
 
 
 # ============================================================
-# Initialization
+# Initialization & Architecture
 # ============================================================
 
 
@@ -82,6 +94,14 @@ def test_runtime_initialization():
     runtime, _, _, _ = make_runtime()
 
     assert runtime.running is False
+
+
+def test_runtime_shares_model_manager_with_engine():
+    custom_manager = MagicMock()
+    runtime = QAIRRuntime(model_manager=custom_manager)
+
+    assert runtime.model_manager is custom_manager
+    assert runtime.engine.manager is custom_manager
 
 
 # ============================================================
@@ -203,9 +223,7 @@ def test_runtime_activate_model():
 
     model = runtime.activate_model("test-model.gguf")
 
-    manager.activate.assert_called_once_with(
-        "test-model.gguf"
-    )
+    manager.activate.assert_called_once_with("test-model.gguf")
 
     assert model is manager.activate.return_value
 
@@ -220,9 +238,7 @@ def test_runtime_activate_model_reloads_when_running():
 
     runtime.activate_model("test-model.gguf")
 
-    manager.activate.assert_called_once_with(
-        "test-model.gguf"
-    )
+    manager.activate.assert_called_once_with("test-model.gguf")
 
     engine.reload.assert_called_once()
 
@@ -243,15 +259,11 @@ def test_runtime_available_prompts():
 def test_runtime_get_prompt():
     runtime, _, _, selector = make_runtime()
 
-    selector.select.return_value = (
-        "Embedded systems prompt"
-    )
+    selector.select.return_value = "Embedded systems prompt"
 
     prompt = runtime.get_prompt("embedded")
 
-    selector.select.assert_called_once_with(
-        "embedded"
-    )
+    selector.select.assert_called_once_with("embedded")
 
     assert prompt == "Embedded systems prompt"
 

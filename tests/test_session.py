@@ -458,3 +458,5 @@ def test_prompt_command_invalid_prompt():
 
     assert handled is True
     assert session.active_prompt == "assistant"
+
+   

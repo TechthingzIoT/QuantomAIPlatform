@@ -33,9 +33,27 @@ class QAIRRuntime:
         engine: InferenceEngine | None = None,
         prompt_selector: PromptSelector | None = None,
     ) -> None:
-        self.model_manager = model_manager or ModelManager()
-        self.engine = engine or InferenceEngine()
-        self.prompt_selector = prompt_selector or PromptSelector()
+        # Use explicitly supplied dependencies.
+        # Only create defaults when None was supplied.
+        self.model_manager = (
+            model_manager
+            if model_manager is not None
+            else ModelManager()
+        )
+
+        self.engine = (
+            engine
+            if engine is not None
+            else InferenceEngine(
+                model_manager=self.model_manager
+            )
+        )
+
+        self.prompt_selector = (
+            prompt_selector
+            if prompt_selector is not None
+            else PromptSelector()
+        )
 
         self.running = False
 

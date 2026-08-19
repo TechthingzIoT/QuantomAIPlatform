@@ -392,12 +392,20 @@ class ChatSession:
             return False
 
         cmd = raw.lower()
-
         # --------------------------------------------------
         # Exit
         # --------------------------------------------------
 
-        if cmd in {"exit", "quit"}:
+        if cmd in {
+            "exit",
+            "quit",
+            "exit()",
+            "quit()",
+            "/exit",
+            "/quit",
+            "/exit()",
+            "/quit()",
+        }:
             self.running = False
             return True
 
@@ -483,3 +491,65 @@ class ChatSession:
         # --------------------------------------------------
 
         return False
+
+        # ======================================================
+    # Interactive REPL
+    # ======================================================
+
+    def run(self) -> None:
+        """
+        Start and run the interactive QAIR chat session.
+
+        The session:
+        - Starts the inference engine
+        - Accepts interactive user input
+        - Handles built-in commands
+        - Sends normal input to the model
+        - Displays model responses
+        - Shuts down cleanly on exit or interruption
+        """
+
+        try:
+            self.startup()
+
+            while self.running:
+                try:
+                    user_input = Prompt.ask(
+                        "[bold cyan]You[/bold cyan]"
+                    )
+
+                except (EOFError, KeyboardInterrupt):
+                    self.console.print()
+                    self.console.print(
+                        "[yellow]Exiting QAIR...[/yellow]"
+                    )
+                    break
+
+                # Handle built-in QAIR commands.
+                if self.command(user_input):
+                    continue
+
+                # Ignore completely empty interactive input.
+                if not user_input.strip():
+                    continue
+
+                try:
+                    reply = self.ask(user_input)
+
+                    self.console.print(
+                        Panel(
+                            reply,
+                            title="QAIR",
+                            border_style="green",
+                        )
+                    )
+
+                    self.console.print()
+
+                except Exception as exc:
+                    self.console.print(
+                        f"[red]Inference error: {exc}[/red]"
+                    )
+
+        finally:
+            self.shutdown()

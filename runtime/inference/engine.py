@@ -34,9 +34,20 @@ class InferenceEngine:
     a simple interface for text generation.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        model_manager: ModelManager | None = None,
+    ) -> None:
         self.settings = settings
-        self.manager = ModelManager()
+
+        # Preserve an explicitly injected model manager.
+        # Only create the default manager when none was supplied.
+        self.manager = (
+            model_manager
+            if model_manager is not None
+            else ModelManager()
+        )
 
         self._model: Llama | None = None
         self._model_info: Model | None = None
@@ -122,11 +133,29 @@ class InferenceEngine:
 
         assert self._model is not None
 
+        actual_max_tokens = (
+            self.settings.max_tokens
+            if max_tokens is None
+            else max_tokens
+        )
+
+        actual_temperature = (
+            self.settings.temperature
+            if temperature is None
+            else temperature
+        )
+
+        actual_top_p = (
+            self.settings.top_p
+            if top_p is None
+            else top_p
+        )
+
         response = self._model.create_chat_completion(
             messages=messages,
-            max_tokens=max_tokens or self.settings.max_tokens,
-            temperature=temperature or self.settings.temperature,
-            top_p=top_p or self.settings.top_p,
+            max_tokens=actual_max_tokens,
+            temperature=actual_temperature,
+            top_p=actual_top_p,
         )
 
         return response["choices"][0]["message"]["content"].strip()
