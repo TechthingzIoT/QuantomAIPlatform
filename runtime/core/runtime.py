@@ -185,6 +185,38 @@ class QAIRRuntime:
             "top_p": engine_summary["top_p"],
             "max_tokens": engine_summary["max_tokens"],
         }
+    # ==================================================
+    # Inference
+    # ==================================================
+
+    def generate(
+        self,
+        messages: list[dict],
+        *,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
+    ) -> str:
+        """
+        Generate a response through the QAIR runtime.
+
+        This is the public inference boundary for clients
+        such as the REST API, CLI, agents, and future RAG
+        pipelines.
+
+        The caller does not need to know about the underlying
+        inference engine.
+        """
+
+        if not self.running:
+            self.start()
+
+        return self.engine.generate(
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        )
 
     # ==================================================
     # Context Manager
