@@ -1,13 +1,24 @@
 """
-=========================================================
+===========================================================
 QAIR Runtime Tests
-=========================================================
+===========================================================
 
-Test suite for central QAIR runtime orchestration layer.
+Test suite for the central QAIR runtime orchestration layer.
+
+Covers:
+- Runtime initialization
+- Dependency injection
+- Lifecycle management
+- Model management
+- Prompt management
+- Runtime state and summary
+- Context manager behavior
+- Knowledge / RAG integration
+- Knowledge-aware inference
 
 Author:
     TIOTAIROBOTIX
-=========================================================
+===========================================================
 """
 
 from unittest.mock import MagicMock
@@ -17,6 +28,11 @@ import pytest
 from runtime.core.runtime import QAIRRuntime
 
 
+# ============================================================
+# Test Fixtures / Helpers
+# ============================================================
+
+
 def make_runtime():
     """Create an isolated QAIRRuntime with mocked dependencies."""
 
@@ -24,12 +40,13 @@ def make_runtime():
     engine = MagicMock()
     prompt_selector = MagicMock()
 
-    # --------------------------------------------------
+    # --------------------------------------------------------
     # Mock model
-    # --------------------------------------------------
+    # --------------------------------------------------------
 
     model = MagicMock()
     model.name = "test-model.gguf"
+    model.path = "/tmp/test-model.gguf"
 
     model_manager.list_models.return_value = [model]
     model_manager.active_model.return_value = model
@@ -41,9 +58,9 @@ def make_runtime():
         "total_size": 123456789,
     }
 
-    # --------------------------------------------------
+    # --------------------------------------------------------
     # Mock inference engine
-    # --------------------------------------------------
+    # --------------------------------------------------------
 
     engine.loaded = False
 
@@ -57,9 +74,11 @@ def make_runtime():
         "max_tokens": 256,
     }
 
-    # --------------------------------------------------
+    engine.generate.return_value = "Generated response."
+
+    # --------------------------------------------------------
     # Mock prompt selector
-    # --------------------------------------------------
+    # --------------------------------------------------------
 
     prompt_selector.DEFAULT_PROMPT = "assistant"
 
@@ -73,12 +92,33 @@ def make_runtime():
 
     prompt_selector.select.return_value = "Assistant system prompt"
 
+    # --------------------------------------------------------
+    # Mock knowledge dependencies
+    # --------------------------------------------------------
+
+    knowledge_store = MagicMock()
+    knowledge_retriever = MagicMock()
+    knowledge_context_builder = MagicMock()
+
+    knowledge_store.get.return_value = None
+    knowledge_retriever.search.return_value = []
+    knowledge_context_builder.build.return_value = ""
+
+    # --------------------------------------------------------
+    # Runtime
+    # --------------------------------------------------------
+
+    runtime = QAIRRuntime(
+        model_manager=model_manager,
+        engine=engine,
+        prompt_selector=prompt_selector,
+        knowledge_store=knowledge_store,
+        knowledge_retriever=knowledge_retriever,
+        knowledge_context_builder=knowledge_context_builder,
+    )
+
     return (
-        QAIRRuntime(
-            model_manager=model_manager,
-            engine=engine,
-            prompt_selector=prompt_selector,
-        ),
+        runtime,
         model_manager,
         engine,
         prompt_selector,
@@ -98,7 +138,10 @@ def test_runtime_initialization():
 
 def test_runtime_shares_model_manager_with_engine():
     custom_manager = MagicMock()
-    runtime = QAIRRuntime(model_manager=custom_manager)
+
+    runtime = QAIRRuntime(
+        model_manager=custom_manager,
+    )
 
     assert runtime.model_manager is custom_manager
     assert runtime.engine.manager is custom_manager
@@ -223,7 +266,9 @@ def test_runtime_activate_model():
 
     model = runtime.activate_model("test-model.gguf")
 
-    manager.activate.assert_called_once_with("test-model.gguf")
+    manager.activate.assert_called_once_with(
+        "test-model.gguf",
+    )
 
     assert model is manager.activate.return_value
 
@@ -238,7 +283,9 @@ def test_runtime_activate_model_reloads_when_running():
 
     runtime.activate_model("test-model.gguf")
 
-    manager.activate.assert_called_once_with("test-model.gguf")
+    manager.activate.assert_called_once_with(
+        "test-model.gguf",
+    )
 
     engine.reload.assert_called_once()
 
@@ -259,11 +306,15 @@ def test_runtime_available_prompts():
 def test_runtime_get_prompt():
     runtime, _, _, selector = make_runtime()
 
-    selector.select.return_value = "Embedded systems prompt"
+    selector.select.return_value = (
+        "Embedded systems prompt"
+    )
 
     prompt = runtime.get_prompt("embedded")
 
-    selector.select.assert_called_once_with("embedded")
+    selector.select.assert_called_once_with(
+        "embedded",
+    )
 
     assert prompt == "Embedded systems prompt"
 
@@ -295,9 +346,288 @@ def test_runtime_summary():
     assert summary["top_p"] == 0.95
     assert summary["max_tokens"] == 256
 
-    # Verify the runtime actually queried its dependencies.
     manager.summary.assert_called_once()
     engine.summary.assert_called_once()
+
+
+# ============================================================
+# Inference
+# ============================================================
+
+
+def test_runtime_generate_without_knowledge_preserves_messages():
+    runtime, _, engine, _ = make_runtime()
+
+    runtime.start()
+
+    messages = [
+        {
+            "role": "user",
+            "content": "Hello",
+        }
+    ]
+
+    runtime.generate(messages)
+
+    engine.generate.assert_called_once_with(
+        messages,
+        max_tokens=None,
+        temperature=None,
+        top_p=None,
+    )
+
+    assert messages == [
+        {
+            "role": "user",
+            "content": "Hello",
+        }
+    ]
+
+
+# ============================================================
+# Knowledge / RAG
+# ============================================================
+
+
+def test_runtime_accepts_knowledge_dependencies():
+    knowledge_store = MagicMock()
+    knowledge_retriever = MagicMock()
+    context_builder = MagicMock()
+
+    runtime, _, engine, selector = make_runtime()
+
+    runtime = QAIRRuntime(
+        model_manager=runtime.model_manager,
+        engine=engine,
+        prompt_selector=selector,
+        knowledge_store=knowledge_store,
+        knowledge_retriever=knowledge_retriever,
+        knowledge_context_builder=context_builder,
+    )
+
+    assert runtime.knowledge_store is knowledge_store
+    assert runtime.knowledge_retriever is knowledge_retriever
+    assert (
+        runtime.knowledge_context_builder
+        is context_builder
+    )
+
+
+def test_runtime_add_knowledge():
+    runtime, _, _, _ = make_runtime()
+
+    document = MagicMock()
+    document.id = "doc-1"
+
+    runtime.add_knowledge(document)
+
+    runtime.knowledge_store.add.assert_called_once_with(
+        document,
+    )
+
+
+def test_runtime_add_knowledge_many():
+    runtime, _, _, _ = make_runtime()
+
+    documents = [
+        MagicMock(),
+        MagicMock(),
+    ]
+
+    runtime.add_knowledge_many(documents)
+
+    runtime.knowledge_store.add_many.assert_called_once_with(
+        documents,
+    )
+
+
+def test_runtime_clear_knowledge():
+    runtime, _, _, _ = make_runtime()
+
+    runtime.clear_knowledge()
+
+    runtime.knowledge_store.clear.assert_called_once()
+
+
+def test_runtime_search_knowledge():
+    runtime, _, _, _ = make_runtime()
+
+    runtime.knowledge_retriever.search.return_value = [
+        "result"
+    ]
+
+    results = runtime.search_knowledge(
+        "Rwanda AI",
+        limit=3,
+    )
+
+    runtime.knowledge_retriever.search.assert_called_once_with(
+        "Rwanda AI",
+        limit=3,
+    )
+
+    assert results == ["result"]
+
+
+def test_runtime_generate_with_knowledge_retrieves_latest_user_message():
+    runtime, _, _, _ = make_runtime()
+
+    runtime.start()
+
+    runtime.knowledge_retriever.search.return_value = [
+        MagicMock()
+    ]
+
+    runtime.knowledge_context_builder.build.return_value = (
+        "Retrieved knowledge."
+    )
+
+    messages = [
+        {
+            "role": "system",
+            "content": "You are QAIR.",
+        },
+        {
+            "role": "user",
+            "content": "Old question",
+        },
+        {
+            "role": "assistant",
+            "content": "Old answer",
+        },
+        {
+            "role": "user",
+            "content": "What is Rwanda AI?",
+        },
+    ]
+
+    runtime.generate(
+        messages,
+        use_knowledge=True,
+        knowledge_limit=3,
+    )
+
+    runtime.knowledge_retriever.search.assert_called_once_with(
+        "What is Rwanda AI?",
+        limit=3,
+    )
+
+
+def test_runtime_generate_with_knowledge_injects_context():
+    runtime, _, engine, _ = make_runtime()
+
+    runtime.start()
+
+    document = MagicMock()
+
+    runtime.knowledge_retriever.search.return_value = [
+        document
+    ]
+
+    runtime.knowledge_context_builder.build.return_value = (
+        "Retrieved knowledge."
+    )
+
+    messages = [
+        {
+            "role": "system",
+            "content": "You are QAIR.",
+        },
+        {
+            "role": "user",
+            "content": "What is QAIR?",
+        },
+    ]
+
+    runtime.generate(
+        messages,
+        use_knowledge=True,
+    )
+
+    augmented = engine.generate.call_args.args[0]
+
+    assert augmented[0] == messages[0]
+
+    assert augmented[1]["role"] == "system"
+
+    assert "Retrieved knowledge." in (
+        augmented[1]["content"]
+    )
+
+    assert augmented[2] == messages[1]
+
+
+def test_runtime_generate_with_knowledge_does_not_mutate_messages():
+    runtime, _, _, _ = make_runtime()
+
+    runtime.start()
+
+    runtime.knowledge_retriever.search.return_value = []
+
+    messages = [
+        {
+            "role": "user",
+            "content": "Hello",
+        }
+    ]
+
+    original = [
+        message.copy()
+        for message in messages
+    ]
+
+    runtime.generate(
+        messages,
+        use_knowledge=True,
+    )
+
+    assert messages == original
+
+
+def test_runtime_generate_with_knowledge_without_results_uses_original_messages():
+    runtime, _, engine, _ = make_runtime()
+
+    runtime.start()
+
+    runtime.knowledge_retriever.search.return_value = []
+
+    messages = [
+        {
+            "role": "user",
+            "content": "Hello",
+        }
+    ]
+
+    runtime.generate(
+        messages,
+        use_knowledge=True,
+    )
+
+    engine.generate.assert_called_once_with(
+        messages,
+        max_tokens=None,
+        temperature=None,
+        top_p=None,
+    )
+
+
+def test_runtime_generate_rejects_invalid_knowledge_limit():
+    runtime, _, _, _ = make_runtime()
+
+    with pytest.raises(
+        ValueError,
+        match="knowledge_limit must be greater than zero",
+    ):
+        runtime.generate(
+            [
+                {
+                    "role": "user",
+                    "content": "Hello",
+                }
+            ],
+            use_knowledge=True,
+            knowledge_limit=0,
+        )
 
 
 # ============================================================

@@ -3,17 +3,22 @@ QAIR Core Runtime
 
 Central lifecycle controller for the Quantom AI Runtime.
 
-Responsibilities:
+Responsibilities
+----------------
 - Initialize QAIR runtime components
 - Discover and manage models
 - Load and unload the inference engine
 - Expose runtime state
 - Provide controlled shutdown
+- Optionally augment inference with retrieved knowledge
 """
 
 from __future__ import annotations
 
 from runtime.inference.engine import InferenceEngine
+from runtime.knowledge.context import KnowledgeContextBuilder
+from runtime.knowledge.retriever import KnowledgeRetriever
+from runtime.knowledge.store import KnowledgeStore
 from runtime.models.manager import ModelManager
 from runtime.prompts.selection import PromptSelector
 
@@ -23,7 +28,7 @@ class QAIRRuntime:
     Central runtime orchestration layer.
 
     QAIRRuntime coordinates model management, inference,
-    and prompt selection without owning the interactive CLI.
+    prompt selection, and optional knowledge retrieval.
     """
 
     def __init__(
@@ -32,9 +37,14 @@ class QAIRRuntime:
         model_manager: ModelManager | None = None,
         engine: InferenceEngine | None = None,
         prompt_selector: PromptSelector | None = None,
+        knowledge_store: KnowledgeStore | None = None,
+        knowledge_retriever: KnowledgeRetriever | None = None,
+        knowledge_context_builder: KnowledgeContextBuilder | None = None,
     ) -> None:
-        # Use explicitly supplied dependencies.
-        # Only create defaults when None was supplied.
+        # --------------------------------------------------
+        # Core dependencies
+        # --------------------------------------------------
+
         self.model_manager = (
             model_manager
             if model_manager is not None
@@ -53,6 +63,30 @@ class QAIRRuntime:
             prompt_selector
             if prompt_selector is not None
             else PromptSelector()
+        )
+
+        # --------------------------------------------------
+        # Knowledge dependencies
+        # --------------------------------------------------
+
+        self.knowledge_store = (
+            knowledge_store
+            if knowledge_store is not None
+            else KnowledgeStore()
+        )
+
+        self.knowledge_retriever = (
+            knowledge_retriever
+            if knowledge_retriever is not None
+            else KnowledgeRetriever(
+                self.knowledge_store
+            )
+        )
+
+        self.knowledge_context_builder = (
+            knowledge_context_builder
+            if knowledge_context_builder is not None
+            else KnowledgeContextBuilder()
         )
 
         self.running = False
@@ -161,6 +195,44 @@ class QAIRRuntime:
         return self.prompt_selector.select(name)
 
     # ==================================================
+    # Knowledge Management
+    # ==================================================
+
+    def add_knowledge(self, document) -> None:
+        """
+        Add a knowledge document to the runtime knowledge store.
+        """
+
+        self.knowledge_store.add(document)
+
+    def add_knowledge_many(self, documents) -> None:
+        """
+        Add multiple knowledge documents.
+        """
+
+        self.knowledge_store.add_many(documents)
+
+    def clear_knowledge(self) -> None:
+        """Remove all knowledge documents."""
+
+        self.knowledge_store.clear()
+
+    def search_knowledge(
+        self,
+        query: str,
+        *,
+        limit: int = 5,
+    ):
+        """
+        Search the runtime knowledge base.
+        """
+
+        return self.knowledge_retriever.search(
+            query,
+            limit=limit,
+        )
+
+    # ==================================================
     # Runtime Information
     # ==================================================
 
@@ -185,6 +257,7 @@ class QAIRRuntime:
             "top_p": engine_summary["top_p"],
             "max_tokens": engine_summary["max_tokens"],
         }
+
     # ==================================================
     # Inference
     # ==================================================
@@ -196,27 +269,123 @@ class QAIRRuntime:
         max_tokens: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
+        use_knowledge: bool = False,
+        knowledge_limit: int = 5,
     ) -> str:
         """
         Generate a response through the QAIR runtime.
 
-        This is the public inference boundary for clients
-        such as the REST API, CLI, agents, and future RAG
-        pipelines.
+        When ``use_knowledge`` is False, inference follows
+        the existing direct inference path.
 
-        The caller does not need to know about the underlying
-        inference engine.
+        When ``use_knowledge`` is True, QAIR:
+
+        1. Extracts the latest user message.
+        2. Retrieves relevant knowledge.
+        3. Builds a controlled context block.
+        4. Injects that context into the conversation.
+        5. Sends the augmented conversation to the engine.
         """
 
         if not self.running:
             self.start()
 
+        inference_messages = list(messages)
+
+        if use_knowledge:
+            if knowledge_limit <= 0:
+                raise ValueError(
+                    "knowledge_limit must be greater than zero."
+                )
+
+            query = self._latest_user_message(
+                inference_messages
+            )
+
+            if query:
+                documents = self.knowledge_retriever.search(
+                    query,
+                    limit=knowledge_limit,
+                )
+
+                context = self.knowledge_context_builder.build(
+                    documents
+                )
+
+                if context:
+                    inference_messages = (
+                        self._augment_messages_with_context(
+                            inference_messages,
+                            context,
+                        )
+                    )
+
         return self.engine.generate(
-            messages,
+            inference_messages,
             max_tokens=max_tokens,
             temperature=temperature,
             top_p=top_p,
         )
+
+    # ==================================================
+    # RAG Helpers
+    # ==================================================
+
+    @staticmethod
+    def _latest_user_message(
+        messages: list[dict],
+    ) -> str:
+        """
+        Return the latest user message content.
+
+        Messages are expected to use the OpenAI-compatible
+        ``role`` and ``content`` structure.
+        """
+
+        for message in reversed(messages):
+            if message.get("role") == "user":
+                content = message.get("content", "")
+
+                if isinstance(content, str):
+                    return content
+
+        return ""
+
+    @staticmethod
+    def _augment_messages_with_context(
+        messages: list[dict],
+        context: str,
+    ) -> list[dict]:
+        """
+        Add retrieved knowledge as a system-level context message.
+
+        Existing messages are copied rather than mutated.
+        """
+
+        augmented = list(messages)
+
+        knowledge_message = {
+            "role": "system",
+            "content": (
+                "Use the following retrieved knowledge to help "
+                "answer the user's request. Treat it as reference "
+                "material and do not invent facts not supported "
+                "by the retrieved context.\n\n"
+                f"{context}"
+            ),
+        }
+
+        # Insert knowledge immediately before the first user
+        # message when possible. This keeps the original system
+        # prompt at the beginning of the conversation.
+        for index, message in enumerate(augmented):
+            if message.get("role") == "user":
+                augmented.insert(index, knowledge_message)
+                return augmented
+
+        augmented.append(knowledge_message)
+
+        return augmented
 
     # ==================================================
     # Context Manager
@@ -228,7 +397,12 @@ class QAIRRuntime:
         self.start()
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
+    def __exit__(
+        self,
+        exc_type,
+        exc_value,
+        traceback,
+    ) -> None:
         """Stop QAIR when leaving a context."""
 
         self.stop()

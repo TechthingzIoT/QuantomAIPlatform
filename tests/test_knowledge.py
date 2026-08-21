@@ -558,3 +558,84 @@ def test_retriever_rejects_zero_weights():
             keyword_weight=0.0,
             semantic_weight=0.0,
         )
+
+
+# ==========================================================
+# Knowledge Context Builder
+# ==========================================================
+
+from runtime.knowledge import KnowledgeContextBuilder
+
+
+def test_context_builder_formats_documents():
+    documents = [
+        KnowledgeDocument(
+            id="rwanda-ai",
+            title="Rwanda AI Strategy",
+            content="Rwanda is developing national AI capabilities.",
+            source="Government of Rwanda",
+        ),
+    ]
+
+    builder = KnowledgeContextBuilder()
+
+    context = builder.build(documents)
+
+    assert "[Knowledge 1]" in context
+    assert "Title: Rwanda AI Strategy" in context
+    assert "Source: Government of Rwanda" in context
+    assert "Rwanda is developing national AI capabilities." in context
+
+
+def test_context_builder_returns_empty_for_no_documents():
+    builder = KnowledgeContextBuilder()
+
+    assert builder.build([]) == ""
+
+
+def test_context_builder_supports_multiple_documents():
+    documents = [
+        KnowledgeDocument(
+            id="doc-1",
+            title="AI",
+            content="Artificial intelligence.",
+        ),
+        KnowledgeDocument(
+            id="doc-2",
+            title="Robotics",
+            content="Robotics engineering.",
+        ),
+    ]
+
+    builder = KnowledgeContextBuilder()
+
+    context = builder.build(documents)
+
+    assert "[Knowledge 1]" in context
+    assert "[Knowledge 2]" in context
+    assert "Artificial intelligence." in context
+    assert "Robotics engineering." in context
+
+
+def test_context_builder_enforces_character_limit():
+    documents = [
+        KnowledgeDocument(
+            id="doc-1",
+            content="A" * 1000,
+        ),
+    ]
+
+    builder = KnowledgeContextBuilder(
+        max_characters=100,
+    )
+
+    context = builder.build(documents)
+
+    assert len(context) <= 100
+
+
+def test_context_builder_rejects_invalid_character_limit():
+    with pytest.raises(ValueError):
+        KnowledgeContextBuilder(
+            max_characters=0,
+        )
