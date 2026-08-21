@@ -44,10 +44,25 @@ class ChatCompletionRequest(BaseModel):
     """OpenAI-compatible chat completion request."""
 
     model: str | None = None
-    messages: list[ChatMessage] = Field(min_length=1)
+
+    messages: list[ChatMessage] = Field(
+        min_length=1,
+    )
+
     temperature: float | None = None
     top_p: float | None = None
     max_tokens: int | None = None
+
+    # --------------------------------------------------
+    # QAIR Knowledge / RAG options
+    # --------------------------------------------------
+
+    use_knowledge: bool = False
+
+    knowledge_limit: int = Field(
+        default=5,
+        gt=0,
+    )
 
 
 class ChatCompletionChoice(BaseModel):
