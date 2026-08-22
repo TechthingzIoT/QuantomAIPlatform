@@ -22,6 +22,7 @@ dev = [
     "black",
     "ruff",
     "pre-commit",
+    "httpx2",
 ]
 
 [project.scripts]
@@ -52,6 +53,7 @@ runtime = [
 testpaths = [
     "tests",
 ]
+
 python_files = [
     "test_*.py",
 ]
