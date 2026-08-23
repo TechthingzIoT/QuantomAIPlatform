@@ -35,9 +35,7 @@ class ConversationHistory:
         """Append a message to the conversation."""
 
         if not isinstance(message, ChatMessage):
-            raise TypeError(
-                "Conversation history only accepts ChatMessage objects."
-            )
+            raise TypeError("Conversation history only accepts ChatMessage objects.")
 
         self.messages.append(message)
 
@@ -89,7 +87,7 @@ class ConversationHistory:
     def from_dict(
         cls,
         data: list[dict[str, str]],
-    ) -> "ConversationHistory":
+    ) -> ConversationHistory:
         """Create conversation history from serialized messages."""
 
         if not isinstance(data, list):
@@ -99,9 +97,7 @@ class ConversationHistory:
 
         for item in data:
             if not isinstance(item, dict):
-                raise TypeError(
-                    "Each conversation message must be a dictionary."
-                )
+                raise TypeError("Each conversation message must be a dictionary.")
 
             history.add(ChatMessage.from_dict(item))
 
@@ -128,15 +124,13 @@ class ConversationHistory:
     def load(
         cls,
         path: str | Path,
-    ) -> "ConversationHistory":
+    ) -> ConversationHistory:
         """Load conversation history from JSON."""
 
         path = Path(path)
 
         if not path.exists():
-            raise FileNotFoundError(
-                f"Conversation history not found: {path}"
-            )
+            raise FileNotFoundError(f"Conversation history not found: {path}")
 
         with path.open("r", encoding="utf-8") as file:
             data = json.load(file)

@@ -40,18 +40,14 @@ class ChatMessage:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, str]) -> "ChatMessage":
+    def from_dict(cls, data: dict[str, str]) -> ChatMessage:
         """Create a ChatMessage from a dictionary."""
 
         if "role" not in data:
-            raise ValueError(
-                "Message data missing required field: 'role'."
-            )
+            raise ValueError("Message data missing required field: 'role'.")
 
         if "content" not in data:
-            raise ValueError(
-                "Message data missing required field: 'content'."
-            )
+            raise ValueError("Message data missing required field: 'content'.")
 
         return cls(
             role=MessageRole(data["role"]),
