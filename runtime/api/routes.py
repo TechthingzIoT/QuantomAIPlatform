@@ -15,9 +15,9 @@ from runtime.api.schemas import (
     ChatMessage,
     HealthResponse,
     ModelsResponse,
+    ReadinessResponse,
 )
 from runtime.core.runtime import QAIRRuntime
-
 
 router = APIRouter()
 
@@ -35,6 +35,30 @@ def health() -> HealthResponse:
 
     return HealthResponse(
         status="ok",
+        running=runtime.running,
+        loaded=runtime.loaded,
+    )
+
+
+@router.get(
+    "/ready",
+    response_model=ReadinessResponse,
+)
+def ready() -> ReadinessResponse:
+    """
+    Return whether QAIR is ready to serve inference.
+
+    The API is ready only when the runtime is running
+    and the inference engine is loaded.
+    """
+    if not runtime.running or not runtime.loaded:
+        raise HTTPException(
+            status_code=503,
+            detail="QAIR runtime is not ready.",
+        )
+
+    return ReadinessResponse(
+        status="ready",
         running=runtime.running,
         loaded=runtime.loaded,
     )

@@ -17,6 +17,12 @@ class HealthResponse(BaseModel):
     status: str
     running: bool
     loaded: bool
+class ReadinessResponse(BaseModel):
+    """QAIR runtime readiness status."""
+
+    status: str
+    running: bool
+    loaded: bool
 
 
 class ModelResponse(BaseModel):
