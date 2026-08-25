@@ -13,10 +13,12 @@ Responsibilities
 - Optionally augment inference with retrieved knowledge
 """
 
-from __future__ import annotations
+from typing import Self
 
 from runtime.inference.engine import InferenceEngine
 from runtime.knowledge.context import KnowledgeContextBuilder
+from runtime.knowledge.loader import KnowledgeLoader
+from runtime.knowledge.registry import list_sources
 from runtime.knowledge.retriever import KnowledgeRetriever
 from runtime.knowledge.store import KnowledgeStore
 from runtime.models.manager import ModelManager
@@ -46,23 +48,17 @@ class QAIRRuntime:
         # --------------------------------------------------
 
         self.model_manager = (
-            model_manager
-            if model_manager is not None
-            else ModelManager()
+            model_manager if model_manager is not None else ModelManager()
         )
 
         self.engine = (
             engine
             if engine is not None
-            else InferenceEngine(
-                model_manager=self.model_manager
-            )
+            else InferenceEngine(model_manager=self.model_manager)
         )
 
         self.prompt_selector = (
-            prompt_selector
-            if prompt_selector is not None
-            else PromptSelector()
+            prompt_selector if prompt_selector is not None else PromptSelector()
         )
 
         # --------------------------------------------------
@@ -70,17 +66,13 @@ class QAIRRuntime:
         # --------------------------------------------------
 
         self.knowledge_store = (
-            knowledge_store
-            if knowledge_store is not None
-            else KnowledgeStore()
+            knowledge_store if knowledge_store is not None else KnowledgeStore()
         )
 
         self.knowledge_retriever = (
             knowledge_retriever
             if knowledge_retriever is not None
-            else KnowledgeRetriever(
-                self.knowledge_store
-            )
+            else KnowledgeRetriever(self.knowledge_store)
         )
 
         self.knowledge_context_builder = (
@@ -99,7 +91,8 @@ class QAIRRuntime:
         """
         Start the QAIR runtime.
 
-        Discovers models and loads the active model.
+        Discovers models, loads the active model, and loads
+        registered local knowledge sources.
         """
 
         if self.running:
@@ -114,6 +107,8 @@ class QAIRRuntime:
 
         if active is None:
             raise RuntimeError("No active model selected.")
+
+        self._load_registered_knowledge()
 
         self.engine.load()
         self.running = True
@@ -197,6 +192,22 @@ class QAIRRuntime:
     # ==================================================
     # Knowledge Management
     # ==================================================
+
+    def _load_registered_knowledge(self) -> None:
+        """
+        Load all registered local knowledge sources.
+
+        Each registered source directory is loaded through
+        KnowledgeLoader and its documents are added to the
+        runtime knowledge store.
+        """
+
+        self.knowledge_store.clear()
+
+        for source in list_sources():
+            loader = KnowledgeLoader(source)
+            documents = loader.load()
+            self.knowledge_store.add_many(documents)
 
     def add_knowledge(self, document) -> None:
         """
@@ -294,13 +305,9 @@ class QAIRRuntime:
 
         if use_knowledge:
             if knowledge_limit <= 0:
-                raise ValueError(
-                    "knowledge_limit must be greater than zero."
-                )
+                raise ValueError("knowledge_limit must be greater than zero.")
 
-            query = self._latest_user_message(
-                inference_messages
-            )
+            query = self._latest_user_message(inference_messages)
 
             if query:
                 documents = self.knowledge_retriever.search(
@@ -308,16 +315,12 @@ class QAIRRuntime:
                     limit=knowledge_limit,
                 )
 
-                context = self.knowledge_context_builder.build(
-                    documents
-                )
+                context = self.knowledge_context_builder.build(documents)
 
                 if context:
-                    inference_messages = (
-                        self._augment_messages_with_context(
-                            inference_messages,
-                            context,
-                        )
+                    inference_messages = self._augment_messages_with_context(
+                        inference_messages,
+                        context,
                     )
 
         return self.engine.generate(
@@ -380,7 +383,10 @@ class QAIRRuntime:
         # prompt at the beginning of the conversation.
         for index, message in enumerate(augmented):
             if message.get("role") == "user":
-                augmented.insert(index, knowledge_message)
+                augmented.insert(
+                    index,
+                    knowledge_message,
+                )
                 return augmented
 
         augmented.append(knowledge_message)
@@ -391,7 +397,7 @@ class QAIRRuntime:
     # Context Manager
     # ==================================================
 
-    def __enter__(self) -> "QAIRRuntime":
+    def __enter__(self) -> Self:
         """Start QAIR when entering a context."""
 
         self.start()
