@@ -19,7 +19,7 @@ class QAIRSettings(BaseModel):
     # Optional local embedding model used by the knowledge layer.
     embedding_model: str | None = None
     embedding_model_path: str | None = None
-
+    embedding_context_size: int = 512
     temperature: float
     top_p: float
     max_tokens: int

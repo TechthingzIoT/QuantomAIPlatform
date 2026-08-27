@@ -117,7 +117,7 @@ class QAIRRuntime:
 
         return LlamaEmbeddingProvider(
             settings.embedding_model_path,
-            n_ctx=settings.context_size,
+            n_ctx=settings.embedding_context_size,
             n_gpu_layers=settings.gpu_layers,
             verbose=settings.verbose,
         )

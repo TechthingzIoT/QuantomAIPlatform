@@ -51,9 +51,7 @@ class LlamaEmbeddingProvider(EmbeddingProvider):
         if not text.strip():
             raise ValueError("Embedding input cannot be empty.")
 
-        response = self._model.create_embedding(
-            text
-        )
+        response = self._model.create_embedding(text)
 
         return self._extract_embedding(response)
 
@@ -73,18 +71,12 @@ class LlamaEmbeddingProvider(EmbeddingProvider):
 
         for text in texts:
             if not isinstance(text, str):
-                raise TypeError(
-                    "Every embedding input must be a string."
-                )
+                raise TypeError("Every embedding input must be a string.")
 
             if not text.strip():
-                raise ValueError(
-                    "Embedding input cannot be empty."
-                )
+                raise ValueError("Embedding input cannot be empty.")
 
-        response = self._model.create_embedding(
-            texts
-        )
+        response = self._model.create_embedding(texts)
 
         return self._extract_embeddings(response)
 
@@ -100,9 +92,7 @@ class LlamaEmbeddingProvider(EmbeddingProvider):
         data = response["data"]
 
         if not data:
-            raise ValueError(
-                "Embedding response contains no data."
-            )
+            raise ValueError("Embedding response contains no data.")
 
         embedding = data[0]["embedding"]
 
@@ -119,7 +109,4 @@ class LlamaEmbeddingProvider(EmbeddingProvider):
 
         data = response["data"]
 
-        return [
-            [float(value) for value in item["embedding"]]
-            for item in data
-        ]
+        return [[float(value) for value in item["embedding"]] for item in data]

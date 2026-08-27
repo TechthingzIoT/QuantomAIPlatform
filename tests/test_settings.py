@@ -13,12 +13,15 @@ def test_settings_model_path():
     assert settings.model_path
 
 
-def test_settings_embedding_model_defaults_to_none():
-    assert settings.embedding_model is None
+def test_settings_embedding_model_is_configured():
+    assert settings.embedding_model == "bge-small-en-v1.5-q8_0.gguf"
 
 
-def test_settings_embedding_model_path_defaults_to_none():
-    assert settings.embedding_model_path is None
+def test_settings_embedding_model_path_is_configured():
+    assert (
+        settings.embedding_model_path == "models/embeddings/"
+        "bge-small-en-v1.5/bge-small-en-v1.5-q8_0.gguf"
+    )
 
 
 def test_settings_temperature():
