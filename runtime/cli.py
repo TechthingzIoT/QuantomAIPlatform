@@ -15,10 +15,18 @@ Responsibilities
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from runtime.knowledge.registry import (
+    add_source,
+    clear_sources,
+    list_sources,
+    remove_source,
+)
 from runtime.models.manager import ModelManager
 
 # =========================================================
@@ -41,6 +49,15 @@ app = typer.Typer(
 models_app = typer.Typer(
     name="models",
     help="Manage local AI models",
+)
+knowledge_app = typer.Typer(
+    name="knowledge",
+    help="Manage local QAIR knowledge sources",
+)
+
+app.add_typer(
+    knowledge_app,
+    name="knowledge",
 )
 
 app.add_typer(
@@ -267,6 +284,95 @@ def refresh() -> None:
     models = manager.refresh()
 
     console.print(f"[green]✓[/green] Discovered " f"{len(models)} model(s).")
+
+
+# =========================================================
+# KNOWLEDGE
+# =========================================================
+
+
+@knowledge_app.command("sources")
+def knowledge_sources() -> None:
+    """
+    List registered local knowledge sources.
+    """
+
+    sources = list_sources()
+
+    if not sources:
+        console.print("[yellow]No knowledge sources registered.[/yellow]")
+        return
+
+    console.print("Registered Knowledge Sources")
+
+    table = Table(
+        show_header=True,
+    )
+
+    table.add_column(
+        "Source",
+        style="cyan",
+    )
+
+    for source in sources:
+        table.add_row(source)
+
+    console.print(table)
+
+
+@knowledge_app.command("add")
+def knowledge_add(
+    path: str = typer.Argument(
+        ...,
+        help="Local directory containing Markdown knowledge files.",
+    ),
+) -> None:
+    """
+    Register a local knowledge source directory.
+    """
+
+    source = Path(path).expanduser().resolve()
+
+    if not source.exists():
+        console.print(f"[red]✗ Knowledge directory not found:[/red] {source}")
+        raise typer.Exit(code=1)
+
+    if not source.is_dir():
+        console.print(f"[red]✗ Knowledge path is not a directory:[/red] {source}")
+        raise typer.Exit(code=1)
+
+    add_source(source)
+
+    console.print(f"[green]✓ Knowledge source registered:[/green] {source}")
+
+
+@knowledge_app.command("remove")
+def knowledge_remove(
+    path: str = typer.Argument(
+        ...,
+        help="Knowledge source directory to unregister.",
+    ),
+) -> None:
+    """
+    Remove a registered local knowledge source.
+    """
+
+    source = Path(path).expanduser().resolve()
+
+    remove_source(source)
+
+    console.print(f"[green]✓ Knowledge source removed:[/green] {source}")
+
+
+@knowledge_app.command("clear")
+def knowledge_clear() -> None:
+    """
+    Remove all registered knowledge sources.
+    """
+
+    clear_sources()
+
+    console.print("[green]✓ All knowledge sources cleared.[/green]")
 
 
 # =========================================================

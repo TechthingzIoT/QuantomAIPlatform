@@ -1,5 +1,5 @@
 from unittest.mock import patch
-from runtime.knowledge.similarity import cosine_similarity
+
 import pytest
 
 from runtime.knowledge import (
@@ -9,6 +9,8 @@ from runtime.knowledge import (
     KnowledgeStore,
     LlamaEmbeddingProvider,
 )
+from runtime.knowledge.indexer import KnowledgeIndexer
+from runtime.knowledge.similarity import cosine_similarity
 
 
 def test_document_serialization_round_trip():
@@ -147,18 +149,12 @@ def test_retriever_returns_relevant_documents():
             KnowledgeDocument(
                 id="ai",
                 title="Artificial Intelligence",
-                content=(
-                    "AI infrastructure supports "
-                    "machine learning research."
-                ),
+                content=("AI infrastructure supports " "machine learning research."),
             ),
             KnowledgeDocument(
                 id="robotics",
                 title="Robotics",
-                content=(
-                    "Robotics systems use sensors "
-                    "and actuators."
-                ),
+                content=("Robotics systems use sensors " "and actuators."),
             ),
         ]
     )
@@ -212,10 +208,13 @@ def test_retriever_invalid_limit():
 
     retriever = KnowledgeRetriever(store)
 
-    assert retriever.search(
-        "AI",
-        limit=0,
-    ) == []
+    assert (
+        retriever.search(
+            "AI",
+            limit=0,
+        )
+        == []
+    )
 
 
 # ==========================================================
@@ -275,15 +274,11 @@ def test_llama_embedding_provider_single_embedding():
         ]
     }
 
-    with patch(
-        "runtime.knowledge.llama_embeddings.Llama"
-    ) as llama_class:
+    with patch("runtime.knowledge.llama_embeddings.Llama") as llama_class:
         model = llama_class.return_value
         model.create_embedding.return_value = response
 
-        provider = LlamaEmbeddingProvider(
-            "/tmp/embedding.gguf"
-        )
+        provider = LlamaEmbeddingProvider("/tmp/embedding.gguf")
 
         vector = provider.embed("hello")
 
@@ -293,9 +288,7 @@ def test_llama_embedding_provider_single_embedding():
             0.3,
         ]
 
-        model.create_embedding.assert_called_once_with(
-            "hello"
-        )
+        model.create_embedding.assert_called_once_with("hello")
 
 
 def test_llama_embedding_provider_multiple_embeddings():
@@ -316,15 +309,11 @@ def test_llama_embedding_provider_multiple_embeddings():
         ]
     }
 
-    with patch(
-        "runtime.knowledge.llama_embeddings.Llama"
-    ) as llama_class:
+    with patch("runtime.knowledge.llama_embeddings.Llama") as llama_class:
         model = llama_class.return_value
         model.create_embedding.return_value = response
 
-        provider = LlamaEmbeddingProvider(
-            "/tmp/embedding.gguf"
-        )
+        provider = LlamaEmbeddingProvider("/tmp/embedding.gguf")
 
         vectors = provider.embed_many(
             [
@@ -347,12 +336,8 @@ def test_llama_embedding_provider_multiple_embeddings():
 
 
 def test_llama_embedding_provider_rejects_empty_text():
-    with patch(
-        "runtime.knowledge.llama_embeddings.Llama"
-    ):
-        provider = LlamaEmbeddingProvider(
-            "/tmp/embedding.gguf"
-        )
+    with patch("runtime.knowledge.llama_embeddings.Llama"):
+        provider = LlamaEmbeddingProvider("/tmp/embedding.gguf")
 
         with pytest.raises(
             ValueError,
@@ -362,21 +347,14 @@ def test_llama_embedding_provider_rejects_empty_text():
 
 
 def test_llama_embedding_provider_rejects_non_string():
-    with patch(
-        "runtime.knowledge.llama_embeddings.Llama"
-    ):
-        provider = LlamaEmbeddingProvider(
-            "/tmp/embedding.gguf"
-        )
+    with patch("runtime.knowledge.llama_embeddings.Llama"):
+        provider = LlamaEmbeddingProvider("/tmp/embedding.gguf")
 
         with pytest.raises(
             TypeError,
             match="Embedding input must be a string.",
         ):
             provider.embed(123)  # type: ignore[arg-type]
-
-
-            from runtime.knowledge.similarity import cosine_similarity
 
 
 def test_cosine_similarity_identical_vectors():
@@ -420,6 +398,7 @@ def test_cosine_similarity_rejects_zero_vector():
             [1.0, 0.0],
         )
 
+
 # ==========================================================
 # Hybrid Retrieval
 # ==========================================================
@@ -432,9 +411,7 @@ def test_document_embedding_round_trip():
         embedding=[0.1, 0.2, 0.3],
     )
 
-    restored = KnowledgeDocument.from_dict(
-        document.to_dict()
-    )
+    restored = KnowledgeDocument.from_dict(document.to_dict())
 
     assert restored.embedding == [
         0.1,
@@ -639,3 +616,79 @@ def test_context_builder_rejects_invalid_character_limit():
         KnowledgeContextBuilder(
             max_characters=0,
         )
+
+
+## ==========================================================
+# Knowledge Indexer
+# ==========================================================
+
+
+def test_knowledge_indexer_generates_embeddings():
+    provider = FakeEmbeddingProvider()
+
+    documents = [
+        KnowledgeDocument(
+            id="doc-1",
+            title="QAIR",
+            content="Local AI runtime.",
+        ),
+        KnowledgeDocument(
+            id="doc-2",
+            title="AI Sovereignty",
+            content="Local AI infrastructure.",
+        ),
+    ]
+
+    indexer = KnowledgeIndexer(provider)
+
+    indexed = indexer.index(documents)
+
+    assert indexed is documents
+
+    expected_1 = "Title: QAIR\nContent:\nLocal AI runtime."
+    expected_2 = "Title: AI Sovereignty\n" "Content:\n" "Local AI infrastructure."
+
+    assert documents[0].embedding == [
+        float(len(expected_1)),
+        float(len(expected_1.split())),
+    ]
+
+    assert documents[1].embedding == [
+        float(len(expected_2)),
+        float(len(expected_2.split())),
+    ]
+
+
+def test_knowledge_indexer_empty_documents():
+    provider = FakeEmbeddingProvider()
+
+    indexer = KnowledgeIndexer(provider)
+
+    assert indexer.index([]) == []
+
+
+def test_knowledge_indexer_rejects_embedding_count_mismatch():
+    class BadProvider(EmbeddingProvider):
+        def embed(self, text: str) -> list[float]:
+            return [1.0]
+
+        def embed_many(
+            self,
+            texts: list[str],
+        ) -> list[list[float]]:
+            return []
+
+    documents = [
+        KnowledgeDocument(
+            id="doc-1",
+            content="Test",
+        )
+    ]
+
+    indexer = KnowledgeIndexer(BadProvider())
+
+    with pytest.raises(
+        ValueError,
+        match="different number of embeddings",
+    ):
+        indexer.index(documents)

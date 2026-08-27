@@ -303,3 +303,139 @@ def test_models_use_invalid_model(mock_manager):
 
     assert result.exit_code != 0
     assert "missing.gguf" in result.stdout
+
+# =========================================================
+# KNOWLEDGE HELP
+# =========================================================
+
+
+def test_knowledge_help():
+    result = runner.invoke(
+        app,
+        ["knowledge", "--help"],
+    )
+
+    assert result.exit_code == 0
+    assert "Manage local QAIR knowledge sources" in result.stdout
+    assert "sources" in result.stdout
+    assert "add" in result.stdout
+    assert "remove" in result.stdout
+    assert "clear" in result.stdout
+
+
+# =========================================================
+# KNOWLEDGE SOURCES
+# =========================================================
+
+
+@patch("runtime.cli.list_sources")
+def test_knowledge_sources(mock_list_sources):
+    mock_list_sources.return_value = [
+        "/tmp/qair-knowledge",
+        "/tmp/rwanda-ai",
+    ]
+
+    result = runner.invoke(
+        app,
+        ["knowledge", "sources"],
+    )
+
+    assert result.exit_code == 0
+    assert "Registered Knowledge Sources" in result.stdout
+    assert "/tmp/qair-knowledge" in result.stdout
+    assert "/tmp/rwanda-ai" in result.stdout
+
+
+@patch("runtime.cli.list_sources")
+def test_knowledge_sources_empty(mock_list_sources):
+    mock_list_sources.return_value = []
+
+    result = runner.invoke(
+        app,
+        ["knowledge", "sources"],
+    )
+
+    assert result.exit_code == 0
+    assert "No knowledge sources registered." in result.stdout
+
+
+# =========================================================
+# KNOWLEDGE ADD
+# =========================================================
+
+
+@patch("runtime.cli.add_source")
+def test_knowledge_add(mock_add_source, tmp_path):
+    result = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "add",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Knowledge source registered" in result.stdout
+
+    mock_add_source.assert_called_once_with(
+        tmp_path.resolve()
+    )
+
+
+def test_knowledge_add_missing_directory(tmp_path):
+    missing = tmp_path / "missing"
+
+    result = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "add",
+            str(missing),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Knowledge directory not found" in result.stdout
+
+
+# =========================================================
+# KNOWLEDGE REMOVE
+# =========================================================
+
+
+@patch("runtime.cli.remove_source")
+def test_knowledge_remove(mock_remove_source, tmp_path):
+    result = runner.invoke(
+        app,
+        [
+            "knowledge",
+            "remove",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Knowledge source removed" in result.stdout
+
+    mock_remove_source.assert_called_once_with(
+        tmp_path.resolve()
+    )
+
+
+# =========================================================
+# KNOWLEDGE CLEAR
+# =========================================================
+
+
+@patch("runtime.cli.clear_sources")
+def test_knowledge_clear(mock_clear_sources):
+    result = runner.invoke(
+        app,
+        ["knowledge", "clear"],
+    )
+
+    assert result.exit_code == 0
+    assert "All knowledge sources cleared" in result.stdout
+
+    mock_clear_sources.assert_called_once_with()

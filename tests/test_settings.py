@@ -13,6 +13,14 @@ def test_settings_model_path():
     assert settings.model_path
 
 
+def test_settings_embedding_model_defaults_to_none():
+    assert settings.embedding_model is None
+
+
+def test_settings_embedding_model_path_defaults_to_none():
+    assert settings.embedding_model_path is None
+
+
 def test_settings_temperature():
     assert settings.temperature == 0.3
 
@@ -43,3 +51,5 @@ def test_load_settings():
     assert isinstance(loaded, QAIRSettings)
     assert loaded.model == settings.model
     assert loaded.model_path == settings.model_path
+    assert loaded.embedding_model == settings.embedding_model
+    assert loaded.embedding_model_path == settings.embedding_model_path

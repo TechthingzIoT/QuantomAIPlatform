@@ -15,8 +15,11 @@ Responsibilities
 
 from typing import Self
 
+from runtime.config.settings import settings
 from runtime.inference.engine import InferenceEngine
 from runtime.knowledge.context import KnowledgeContextBuilder
+from runtime.knowledge.indexer import KnowledgeIndexer
+from runtime.knowledge.llama_embeddings import LlamaEmbeddingProvider
 from runtime.knowledge.loader import KnowledgeLoader
 from runtime.knowledge.registry import list_sources
 from runtime.knowledge.retriever import KnowledgeRetriever
@@ -54,7 +57,9 @@ class QAIRRuntime:
         self.engine = (
             engine
             if engine is not None
-            else InferenceEngine(model_manager=self.model_manager)
+            else InferenceEngine(
+                model_manager=self.model_manager,
+            )
         )
 
         self.prompt_selector = (
@@ -69,10 +74,24 @@ class QAIRRuntime:
             knowledge_store if knowledge_store is not None else KnowledgeStore()
         )
 
+        # --------------------------------------------------
+        # Optional embedding infrastructure
+        # --------------------------------------------------
+
+        self.embedding_provider = self._create_embedding_provider()
+
+        self.knowledge_indexer = (
+            KnowledgeIndexer(self.embedding_provider)
+            if self.embedding_provider is not None
+            else None
+        )
+
         self.knowledge_retriever = (
             knowledge_retriever
             if knowledge_retriever is not None
-            else KnowledgeRetriever(self.knowledge_store)
+            else KnowledgeRetriever(
+                self.knowledge_store,
+            )
         )
 
         self.knowledge_context_builder = (
@@ -82,6 +101,26 @@ class QAIRRuntime:
         )
 
         self.running = False
+
+    @staticmethod
+    def _create_embedding_provider():
+        """
+        Create the configured local embedding provider.
+
+        Embeddings are optional. When no embedding model path
+        is configured, QAIR falls back to the existing
+        knowledge retrieval behavior.
+        """
+
+        if not settings.embedding_model_path:
+            return None
+
+        return LlamaEmbeddingProvider(
+            settings.embedding_model_path,
+            n_ctx=settings.context_size,
+            n_gpu_layers=settings.gpu_layers,
+            verbose=settings.verbose,
+        )
 
     # ==================================================
     # Lifecycle
@@ -198,8 +237,10 @@ class QAIRRuntime:
         Load all registered local knowledge sources.
 
         Each registered source directory is loaded through
-        KnowledgeLoader and its documents are added to the
-        runtime knowledge store.
+        KnowledgeLoader.
+
+        When an embedding provider is configured, the loaded
+        documents are indexed before being stored.
         """
 
         self.knowledge_store.clear()
@@ -207,6 +248,12 @@ class QAIRRuntime:
         for source in list_sources():
             loader = KnowledgeLoader(source)
             documents = loader.load()
+
+            if self.knowledge_indexer is not None:
+                documents = self.knowledge_indexer.index(
+                    documents,
+                )
+
             self.knowledge_store.add_many(documents)
 
     def add_knowledge(self, document) -> None:
@@ -307,7 +354,9 @@ class QAIRRuntime:
             if knowledge_limit <= 0:
                 raise ValueError("knowledge_limit must be greater than zero.")
 
-            query = self._latest_user_message(inference_messages)
+            query = self._latest_user_message(
+                inference_messages,
+            )
 
             if query:
                 documents = self.knowledge_retriever.search(
@@ -315,7 +364,9 @@ class QAIRRuntime:
                     limit=knowledge_limit,
                 )
 
-                context = self.knowledge_context_builder.build(documents)
+                context = self.knowledge_context_builder.build(
+                    documents,
+                )
 
                 if context:
                     inference_messages = self._augment_messages_with_context(

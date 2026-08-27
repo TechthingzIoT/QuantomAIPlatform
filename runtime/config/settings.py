@@ -2,21 +2,24 @@
 =========================================================
 QAIR Settings
 =========================================================
-
 Defines the QAIR configuration model and exposes
 the global runtime settings instance.
 """
 
 from pathlib import Path
 
-from pydantic import BaseModel
-
 import yaml
+from pydantic import BaseModel
 
 
 class QAIRSettings(BaseModel):
     model: str
     model_path: str
+
+    # Optional local embedding model used by the knowledge layer.
+    embedding_model: str | None = None
+    embedding_model_path: str | None = None
+
     temperature: float
     top_p: float
     max_tokens: int
