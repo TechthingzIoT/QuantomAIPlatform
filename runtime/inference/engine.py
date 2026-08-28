@@ -43,11 +43,7 @@ class InferenceEngine:
 
         # Preserve an explicitly injected model manager.
         # Only create the default manager when none was supplied.
-        self.manager = (
-            model_manager
-            if model_manager is not None
-            else ModelManager()
-        )
+        self.manager = model_manager if model_manager is not None else ModelManager()
 
         self._model: Llama | None = None
         self._model_info: Model | None = None
@@ -111,6 +107,27 @@ class InferenceEngine:
 
         return self._model_info
 
+    def count_tokens(self, text: str) -> int:
+        """
+        Count tokens using the currently loaded model tokenizer.
+
+        The model is loaded lazily when necessary.
+        """
+        if not isinstance(text, str):
+            raise TypeError("text must be a string.")
+
+        if not self.loaded:
+            self.load()
+
+        assert self._model is not None
+
+        return len(
+            self._model.tokenize(
+                text.encode("utf-8"),
+                add_bos=False,
+            )
+        )
+
     # ==================================================
     # Generation
     # ==================================================
@@ -134,22 +151,14 @@ class InferenceEngine:
         assert self._model is not None
 
         actual_max_tokens = (
-            self.settings.max_tokens
-            if max_tokens is None
-            else max_tokens
+            self.settings.max_tokens if max_tokens is None else max_tokens
         )
 
         actual_temperature = (
-            self.settings.temperature
-            if temperature is None
-            else temperature
+            self.settings.temperature if temperature is None else temperature
         )
 
-        actual_top_p = (
-            self.settings.top_p
-            if top_p is None
-            else top_p
-        )
+        actual_top_p = self.settings.top_p if top_p is None else top_p
 
         response = self._model.create_chat_completion(
             messages=messages,
