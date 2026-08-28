@@ -20,9 +20,7 @@ class KnowledgeContextBuilder:
         max_characters: int = 12000,
     ) -> None:
         if max_characters <= 0:
-            raise ValueError(
-                "max_characters must be greater than zero."
-            )
+            raise ValueError("max_characters must be greater than zero.")
 
         self.max_characters = max_characters
 
@@ -48,17 +46,8 @@ class KnowledgeContextBuilder:
 
             separator_length = 2 if sections else 0
 
-            if (
-                total_length
-                + separator_length
-                + len(section)
-                > self.max_characters
-            ):
-                remaining = (
-                    self.max_characters
-                    - total_length
-                    - separator_length
-                )
+            if total_length + separator_length + len(section) > self.max_characters:
+                remaining = self.max_characters - total_length - separator_length
 
                 if remaining > 0:
                     sections.append(section[:remaining])
@@ -67,10 +56,7 @@ class KnowledgeContextBuilder:
 
             sections.append(section)
 
-            total_length += (
-                separator_length
-                + len(section)
-            )
+            total_length += separator_length + len(section)
 
         return "\n\n".join(sections)
 
