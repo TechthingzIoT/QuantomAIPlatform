@@ -19,13 +19,15 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from runtime.chat.history import ConversationHistory
+from runtime.chat.message import ChatMessage, MessageRole
+from runtime.core.runtime import QAIRRuntime
+
 # IMPORTANT:
 # These imports intentionally live at module level.
 # tests/test_session.py patches these symbols directly
 # using runtime.chat.session.InferenceEngine, etc.
 from runtime.inference.engine import InferenceEngine
-from runtime.chat.history import ConversationHistory
-from runtime.chat.message import ChatMessage, MessageRole
 from runtime.prompts.selection import PromptSelector
 
 
@@ -55,6 +57,10 @@ class ChatSession:
 
         self.engine = InferenceEngine()
 
+        # QAIRRuntime owns the knowledge/RAG pipeline while sharing
+        # this exact inference engine instance.
+        self.runtime = QAIRRuntime(engine=self.engine)
+
         # --------------------------------------------------
         # Conversation history
         # --------------------------------------------------
@@ -66,9 +72,7 @@ class ChatSession:
         # --------------------------------------------------
 
         self.prompt_selector = (
-            prompt_selector
-            if prompt_selector is not None
-            else PromptSelector()
+            prompt_selector if prompt_selector is not None else PromptSelector()
         )
 
         self.active_prompt = (
@@ -80,9 +84,7 @@ class ChatSession:
         self.active_prompt = self.active_prompt.strip().lower()
 
         # Validate and load the selected system prompt.
-        system_prompt = self.prompt_selector.select(
-            self.active_prompt
-        )
+        system_prompt = self.prompt_selector.select(self.active_prompt)
 
         self.system_message = ChatMessage(
             role=MessageRole.SYSTEM,
@@ -136,12 +138,17 @@ class ChatSession:
 
         self.banner()
 
-        self.console.print(
-            "[cyan]Loading active model...[/cyan]"
-        )
+        self.console.print("[cyan]Loading active model...[/cyan]")
 
         try:
             self.engine.load()
+
+            # The engine is loaded by the session for backward
+            # compatibility with the existing session lifecycle.
+            # QAIRRuntime then uses the same engine and prepares
+            # registered knowledge for RAG.
+            self.runtime._load_registered_knowledge()
+            self.runtime.running = True
 
             model_name = (
                 self.engine.model.name
@@ -149,19 +156,13 @@ class ChatSession:
                 else "Unknown"
             )
 
-            self.console.print(
-                f"[green]✓ Loaded:[/green] {model_name}"
-            )
+            self.console.print(f"[green]✓ Loaded:[/green] {model_name}")
 
             self.console.print()
 
-            self.console.print(
-                "[dim]Type '/help' for commands.[/dim]"
-            )
+            self.console.print("[dim]Type '/help' for commands.[/dim]")
 
-            self.console.print(
-                "[dim]Type 'exit' or 'quit' to leave QAIR.[/dim]"
-            )
+            self.console.print("[dim]Type 'exit' or 'quit' to leave QAIR.[/dim]")
 
             self.console.print()
 
@@ -183,18 +184,15 @@ class ChatSession:
 
         self.console.print()
 
-        self.console.print(
-            "[yellow]Shutting down QAIR...[/yellow]"
-        )
+        self.console.print("[yellow]Shutting down QAIR...[/yellow]")
 
         try:
             self.engine.unload()
+            self.runtime.running = False
         finally:
             self.running = False
 
-        self.console.print(
-            "[green]Session closed.[/green]"
-        )
+        self.console.print("[green]Session closed.[/green]")
 
     # ======================================================
     # Prompt Management
@@ -212,18 +210,13 @@ class ChatSession:
         name = name.strip().lower()
 
         if not name:
-            raise ValueError(
-                "Prompt name cannot be empty."
-            )
+            raise ValueError("Prompt name cannot be empty.")
 
         if not self.prompt_selector.exists(name):
-            available = ", ".join(
-                self.prompt_selector.available()
-            )
+            available = ", ".join(self.prompt_selector.available())
 
             raise ValueError(
-                f"Unknown prompt '{name}'. "
-                f"Available prompts: {available}"
+                f"Unknown prompt '{name}'. " f"Available prompts: {available}"
             )
 
         # Select first so an invalid prompt cannot mutate
@@ -248,24 +241,16 @@ class ChatSession:
         self.console.print()
 
         if not available:
-            self.console.print(
-                "[yellow]No prompts available.[/yellow]"
-            )
+            self.console.print("[yellow]No prompts available.[/yellow]")
             self.console.print()
             return
 
         lines = []
 
         for name in available:
-            marker = (
-                "* "
-                if name == self.active_prompt
-                else "  "
-            )
+            marker = "* " if name == self.active_prompt else "  "
 
-            lines.append(
-                f"{marker}{name}"
-            )
+            lines.append(f"{marker}{name}")
 
         self.console.print(
             Panel.fit(
@@ -302,7 +287,12 @@ class ChatSession:
 
         messages = self.history.to_messages()
 
-        reply = self.engine.generate(messages)
+        # Route normal chat through QAIRRuntime so the configured
+        # knowledge retrieval/RAG pipeline can augment inference.
+        reply = self.runtime.generate(
+            messages,
+            use_knowledge=True,
+        )
 
         assistant_message = ChatMessage(
             role=MessageRole.ASSISTANT,
@@ -326,9 +316,7 @@ class ChatSession:
         self.history.clear()
         self.history.add(self.system_message)
 
-        self.console.print(
-            "[green]Conversation cleared.[/green]"
-        )
+        self.console.print("[green]Conversation cleared.[/green]")
 
     def stats(self) -> None:
         """Display runtime statistics."""
@@ -339,17 +327,15 @@ class ChatSession:
 
         self.console.print(
             Panel.fit(
-                "\n".join(
-                    [
-                        f"Model       : {summary['model']}",
-                        f"Loaded      : {summary['loaded']}",
-                        f"Context     : {summary['context']}",
-                        f"GPU Layers  : {summary['gpu_layers']}",
-                        f"Temperature : {summary['temperature']}",
-                        f"Top P       : {summary['top_p']}",
-                        f"Messages    : {len(self.history)}",
-                        f"Prompt      : {self.active_prompt}",
-                    ]
+                (
+                    f"Model       : {summary['model']}\n"
+                    f"Loaded      : {summary['loaded']}\n"
+                    f"Context     : {summary['context']}\n"
+                    f"GPU Layers  : {summary['gpu_layers']}\n"
+                    f"Temperature : {summary['temperature']}\n"
+                    f"Top P       : {summary['top_p']}\n"
+                    f"Messages    : {len(self.history)}\n"
+                    f"Prompt      : {self.active_prompt}"
                 ),
                 title="QAIR Runtime",
                 border_style="cyan",
@@ -360,9 +346,7 @@ class ChatSession:
         """Display conversation history."""
 
         if self.history.empty():
-            self.console.print(
-                "[yellow]History is empty.[/yellow]"
-            )
+            self.console.print("[yellow]History is empty.[/yellow]")
             return
 
         self.console.print()
@@ -373,6 +357,7 @@ class ChatSession:
         self.console.print()
 
         # ==================================================
+
     # Runtime Commands
     # ==================================================
 
@@ -448,14 +433,11 @@ class ChatSession:
                 self.set_prompt(prompt_name)
 
                 self.console.print(
-                    f"[green]✓ Prompt switched to:[/green] "
-                    f"{self.active_prompt}"
+                    f"[green]✓ Prompt switched to:[/green] " f"{self.active_prompt}"
                 )
 
             except ValueError as exc:
-                self.console.print(
-                    f"[red]✗ {exc}[/red]"
-                )
+                self.console.print(f"[red]✗ {exc}[/red]")
 
             return True
 
@@ -468,16 +450,14 @@ class ChatSession:
 
             self.console.print(
                 Panel.fit(
-                    "\n".join(
-                        [
-                            "/help              Show commands",
-                            "/prompt            List available prompts",
-                            "/prompt <name>     Switch system prompt",
-                            "/history           Show conversation",
-                            "/stats             Runtime information",
-                            "/clear             Clear conversation",
-                            "exit               Quit QAIR",
-                        ]
+                    (
+                        "/help              Show commands\n"
+                        "/prompt            List available prompts\n"
+                        "/prompt <name>     Switch system prompt\n"
+                        "/history           Show conversation\n"
+                        "/stats             Runtime information\n"
+                        "/clear             Clear conversation\n"
+                        "exit               Quit QAIR"
                     ),
                     title="QAIR Commands",
                     border_style="green",
@@ -493,6 +473,7 @@ class ChatSession:
         return False
 
         # ======================================================
+
     # Interactive REPL
     # ======================================================
 
@@ -514,15 +495,11 @@ class ChatSession:
 
             while self.running:
                 try:
-                    user_input = Prompt.ask(
-                        "[bold cyan]You[/bold cyan]"
-                    )
+                    user_input = Prompt.ask("[bold cyan]You[/bold cyan]")
 
                 except (EOFError, KeyboardInterrupt):
                     self.console.print()
-                    self.console.print(
-                        "[yellow]Exiting QAIR...[/yellow]"
-                    )
+                    self.console.print("[yellow]Exiting QAIR...[/yellow]")
                     break
 
                 # Handle built-in QAIR commands.
@@ -546,10 +523,8 @@ class ChatSession:
 
                     self.console.print()
 
-                except Exception as exc:
-                    self.console.print(
-                        f"[red]Inference error: {exc}[/red]"
-                    )
+                except Exception as exc:  # noqa: BLE001
+                    self.console.print(f"[red]Inference error: {exc}[/red]")
 
         finally:
             self.shutdown()

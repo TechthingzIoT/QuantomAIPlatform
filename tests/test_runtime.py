@@ -27,7 +27,6 @@ import pytest
 
 from runtime.core.runtime import QAIRRuntime
 
-
 # ============================================================
 # Test Fixtures / Helpers
 # ============================================================
@@ -306,9 +305,7 @@ def test_runtime_available_prompts():
 def test_runtime_get_prompt():
     runtime, _, _, selector = make_runtime()
 
-    selector.select.return_value = (
-        "Embedded systems prompt"
-    )
+    selector.select.return_value = "Embedded systems prompt"
 
     prompt = runtime.get_prompt("embedded")
 
@@ -407,10 +404,7 @@ def test_runtime_accepts_knowledge_dependencies():
 
     assert runtime.knowledge_store is knowledge_store
     assert runtime.knowledge_retriever is knowledge_retriever
-    assert (
-        runtime.knowledge_context_builder
-        is context_builder
-    )
+    assert runtime.knowledge_context_builder is context_builder
 
 
 def test_runtime_add_knowledge():
@@ -452,9 +446,7 @@ def test_runtime_clear_knowledge():
 def test_runtime_search_knowledge():
     runtime, _, _, _ = make_runtime()
 
-    runtime.knowledge_retriever.search.return_value = [
-        "result"
-    ]
+    runtime.knowledge_retriever.search.return_value = ["result"]
 
     results = runtime.search_knowledge(
         "Rwanda AI",
@@ -474,13 +466,9 @@ def test_runtime_generate_with_knowledge_retrieves_latest_user_message():
 
     runtime.start()
 
-    runtime.knowledge_retriever.search.return_value = [
-        MagicMock()
-    ]
+    runtime.knowledge_retriever.search.return_value = [MagicMock()]
 
-    runtime.knowledge_context_builder.build.return_value = (
-        "Retrieved knowledge."
-    )
+    runtime.knowledge_context_builder.build.return_value = "Retrieved knowledge."
 
     messages = [
         {
@@ -520,13 +508,9 @@ def test_runtime_generate_with_knowledge_injects_context():
 
     document = MagicMock()
 
-    runtime.knowledge_retriever.search.return_value = [
-        document
-    ]
+    runtime.knowledge_retriever.search.return_value = [document]
 
-    runtime.knowledge_context_builder.build.return_value = (
-        "Retrieved knowledge."
-    )
+    runtime.knowledge_context_builder.build.return_value = "Retrieved knowledge."
 
     messages = [
         {
@@ -546,15 +530,19 @@ def test_runtime_generate_with_knowledge_injects_context():
 
     augmented = engine.generate.call_args.args[0]
 
-    assert augmented[0] == messages[0]
+    # RAG context is merged into the existing system message.
+    # QAIR must not create a second system message.
+    assert augmented[0]["role"] == "system"
+    assert augmented[0]["content"].startswith("You are QAIR.")
+    assert "Retrieved knowledge." in augmented[0]["content"]
 
-    assert augmented[1]["role"] == "system"
+    # The original user message remains immediately after
+    # the augmented system message.
+    assert augmented[1] == messages[1]
 
-    assert "Retrieved knowledge." in (
-        augmented[1]["content"]
-    )
-
-    assert augmented[2] == messages[1]
+    # The original input messages must remain unchanged.
+    assert messages[0]["content"] == "You are QAIR."
+    assert messages[1]["content"] == "What is QAIR?"
 
 
 def test_runtime_generate_with_knowledge_does_not_mutate_messages():
@@ -571,10 +559,7 @@ def test_runtime_generate_with_knowledge_does_not_mutate_messages():
         }
     ]
 
-    original = [
-        message.copy()
-        for message in messages
-    ]
+    original = [message.copy() for message in messages]
 
     runtime.generate(
         messages,

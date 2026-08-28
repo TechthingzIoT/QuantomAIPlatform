@@ -348,12 +348,37 @@ class QAIRRuntime:
         if not self.running:
             self.start()
 
-        inference_messages = list(messages)
+        inference_messages = [dict(message) for message in messages]
 
-        if use_knowledge:
-            if knowledge_limit <= 0:
-                raise ValueError("knowledge_limit must be greater than zero.")
+        if use_knowledge and knowledge_limit <= 0:
+            raise ValueError("knowledge_limit must be greater than zero.")
 
+        query = self._latest_user_message(
+            inference_messages,
+        )
+
+        if query:
+            documents = self.knowledge_retriever.search(
+                query,
+                limit=knowledge_limit,
+            )
+
+            context = self.knowledge_context_builder.build(
+                documents,
+            )
+
+            if context:
+                inference_messages = self._augment_messages_with_context(
+                    inference_messages,
+                    context,
+                )
+
+                return self.engine.generate(
+                    inference_messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                )
             query = self._latest_user_message(
                 inference_messages,
             )
@@ -411,36 +436,50 @@ class QAIRRuntime:
         context: str,
     ) -> list[dict]:
         """
-        Add retrieved knowledge as a system-level context message.
+        Add retrieved knowledge to the existing system message.
 
-        Existing messages are copied rather than mutated.
+        QAIR maintains exactly one system message. Retrieved knowledge
+        is merged into that message instead of creating a second
+        system-level message.
+
+        Existing messages are copied and never mutated.
         """
 
-        augmented = list(messages)
+        augmented = [dict(message) for message in messages]
 
-        knowledge_message = {
-            "role": "system",
-            "content": (
-                "Use the following retrieved knowledge to help "
-                "answer the user's request. Treat it as reference "
-                "material and do not invent facts not supported "
-                "by the retrieved context.\n\n"
-                f"{context}"
-            ),
-        }
+        knowledge_context = (
+            "\n\n"
+            "Retrieved Knowledge:\n"
+            "Use the following retrieved knowledge as reference "
+            "material when answering the user's request. "
+            "Do not invent facts that are not supported by it.\n\n"
+            f"{context}"
+        )
 
-        # Insert knowledge immediately before the first user
-        # message when possible. This keeps the original system
-        # prompt at the beginning of the conversation.
+        # Merge knowledge into the existing system message.
         for index, message in enumerate(augmented):
-            if message.get("role") == "user":
-                augmented.insert(
-                    index,
-                    knowledge_message,
-                )
+            if message.get("role") == "system":
+                existing_content = message.get("content", "")
+
+                if not isinstance(existing_content, str):
+                    existing_content = str(existing_content)
+
+                augmented[index] = {
+                    **message,
+                    "content": existing_content + knowledge_context,
+                }
+
                 return augmented
 
-        augmented.append(knowledge_message)
+        # Defensive fallback: create a system message only when
+        # the caller supplied none.
+        augmented.insert(
+            0,
+            {
+                "role": "system",
+                "content": knowledge_context.lstrip(),
+            },
+        )
 
         return augmented
 
