@@ -630,3 +630,47 @@ def test_runtime_context_manager():
     engine.unload.assert_called_once()
 
     assert runtime.running is False
+
+
+def test_runtime_generate_with_knowledge_respects_token_budget():
+    runtime, _, engine, _ = make_runtime()
+
+    runtime.start()
+
+    engine.settings.context_size = 100
+    engine.settings.max_tokens = 20
+
+    def token_counter(text: str) -> int:
+        return len(text.split())
+
+    engine.count_tokens.side_effect = token_counter
+
+    document = MagicMock()
+    runtime.knowledge_retriever.search.return_value = [document]
+    runtime.knowledge_context_builder.build.return_value = "Retrieved knowledge."
+
+    messages = [
+        {
+            "role": "system",
+            "content": "System prompt",
+        },
+        {
+            "role": "user",
+            "content": "What is QAIR?",
+        },
+    ]
+
+    runtime.generate(
+        messages,
+        use_knowledge=True,
+    )
+
+    runtime.knowledge_context_builder.build.assert_called_once()
+
+    call = runtime.knowledge_context_builder.build.call_args
+
+    assert call.kwargs["max_tokens"] == (
+        100 - token_counter("System prompt") - token_counter("What is QAIR?") - 20
+    )
+
+    assert call.kwargs["token_counter"] is engine.count_tokens

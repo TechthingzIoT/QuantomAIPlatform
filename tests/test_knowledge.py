@@ -692,3 +692,71 @@ def test_knowledge_indexer_rejects_embedding_count_mismatch():
         match="different number of embeddings",
     ):
         indexer.index(documents)
+
+
+# ==========================================================
+# Token-Budgeted Knowledge Context
+# ==========================================================
+
+
+def test_context_builder_respects_token_budget():
+    builder = KnowledgeContextBuilder()
+
+    documents = [
+        KnowledgeDocument(
+            id="doc-1",
+            title="QAIR",
+            content="one two three four five six seven eight nine ten",
+        )
+    ]
+
+    def token_counter(text: str) -> int:
+        return len(text.split())
+
+    context = builder.build(
+        documents,
+        max_tokens=8,
+        token_counter=token_counter,
+    )
+
+    assert token_counter(context) <= 8
+    assert context.startswith("[Knowledge 1]")
+
+
+def test_context_builder_requires_token_counter_for_token_budget():
+    builder = KnowledgeContextBuilder()
+
+    document = KnowledgeDocument(
+        id="doc-1",
+        content="QAIR knowledge",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="token_counter is required",
+    ):
+        builder.build(
+            [document],
+            max_tokens=8,
+        )
+
+
+def test_context_builder_returns_empty_for_non_positive_token_budget():
+    builder = KnowledgeContextBuilder()
+
+    document = KnowledgeDocument(
+        id="doc-1",
+        content="QAIR knowledge",
+    )
+
+    def token_counter(text: str) -> int:
+        return len(text.split())
+
+    assert (
+        builder.build(
+            [document],
+            max_tokens=0,
+            token_counter=token_counter,
+        )
+        == ""
+    )

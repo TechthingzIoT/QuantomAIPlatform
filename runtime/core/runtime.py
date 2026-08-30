@@ -353,32 +353,7 @@ class QAIRRuntime:
         if use_knowledge and knowledge_limit <= 0:
             raise ValueError("knowledge_limit must be greater than zero.")
 
-        query = self._latest_user_message(
-            inference_messages,
-        )
-
-        if query:
-            documents = self.knowledge_retriever.search(
-                query,
-                limit=knowledge_limit,
-            )
-
-            context = self.knowledge_context_builder.build(
-                documents,
-            )
-
-            if context:
-                inference_messages = self._augment_messages_with_context(
-                    inference_messages,
-                    context,
-                )
-
-                return self.engine.generate(
-                    inference_messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    top_p=top_p,
-                )
+        if use_knowledge:
             query = self._latest_user_message(
                 inference_messages,
             )
@@ -389,15 +364,54 @@ class QAIRRuntime:
                     limit=knowledge_limit,
                 )
 
-                context = self.knowledge_context_builder.build(
-                    documents,
-                )
-
-                if context:
-                    inference_messages = self._augment_messages_with_context(
-                        inference_messages,
-                        context,
+                if documents:
+                    generation_budget = (
+                        self.engine.settings.max_tokens
+                        if max_tokens is None
+                        else max_tokens
                     )
+
+                    context_size = self.engine.settings.context_size
+
+                    if isinstance(context_size, int) and isinstance(
+                        generation_budget,
+                        int,
+                    ):
+                        conversation_tokens = sum(
+                            self.engine.count_tokens(
+                                str(message.get("content", "")),
+                            )
+                            for message in inference_messages
+                        )
+
+                        rag_budget = (
+                            context_size - conversation_tokens - generation_budget
+                        )
+
+                        if rag_budget > 0:
+                            context = self.knowledge_context_builder.build(
+                                documents,
+                                max_tokens=rag_budget,
+                                token_counter=self.engine.count_tokens,
+                            )
+
+                            if context:
+                                inference_messages = (
+                                    self._augment_messages_with_context(
+                                        inference_messages,
+                                        context,
+                                    )
+                                )
+                    else:
+                        context = self.knowledge_context_builder.build(
+                            documents,
+                        )
+
+                        if context:
+                            inference_messages = self._augment_messages_with_context(
+                                inference_messages,
+                                context,
+                            )
 
         return self.engine.generate(
             inference_messages,
