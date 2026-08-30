@@ -516,6 +516,60 @@ def test_retriever_hybrid_ranking():
     }
 
 
+def test_retriever_min_score_filters_weak_results():
+    store = KnowledgeStore()
+    store.add_many(
+        [
+            KnowledgeDocument(
+                id="strong",
+                content="AI infrastructure AI infrastructure.",
+            ),
+            KnowledgeDocument(
+                id="weak",
+                content="AI.",
+            ),
+        ]
+    )
+
+    retriever = KnowledgeRetriever(
+        store,
+        min_score=2.0,
+    )
+
+    results = retriever.search("AI")
+
+    assert [document.id for document in results] == ["strong"]
+
+
+def test_retriever_min_score_includes_exact_threshold():
+    store = KnowledgeStore()
+    store.add(
+        KnowledgeDocument(
+            id="threshold",
+            content="AI infrastructure.",
+        )
+    )
+
+    retriever = KnowledgeRetriever(
+        store,
+        min_score=1.0,
+    )
+
+    results = retriever.search("AI")
+
+    assert [document.id for document in results] == ["threshold"]
+
+
+def test_retriever_rejects_negative_min_score():
+    store = KnowledgeStore()
+
+    with pytest.raises(ValueError, match="min_score cannot be negative"):
+        KnowledgeRetriever(
+            store,
+            min_score=-0.1,
+        )
+
+
 def test_retriever_rejects_negative_keyword_weight():
     store = KnowledgeStore()
 

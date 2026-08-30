@@ -41,29 +41,24 @@ class KnowledgeRetriever:
         *,
         keyword_weight: float = 0.4,
         semantic_weight: float = 0.6,
+        min_score: float = 0.0,
     ) -> None:
+        if min_score < 0:
+            raise ValueError("min_score cannot be negative.")
         if keyword_weight < 0:
-            raise ValueError(
-                "keyword_weight cannot be negative."
-            )
+            raise ValueError("keyword_weight cannot be negative.")
 
         if semantic_weight < 0:
-            raise ValueError(
-                "semantic_weight cannot be negative."
-            )
+            raise ValueError("semantic_weight cannot be negative.")
 
-        if (
-            keyword_weight == 0
-            and semantic_weight == 0
-        ):
-            raise ValueError(
-                "At least one retrieval weight must be greater than zero."
-            )
+        if keyword_weight == 0 and semantic_weight == 0:
+            raise ValueError("At least one retrieval weight must be greater than zero.")
 
         self.store = store
         self.embedding_provider = embedding_provider
         self.keyword_weight = keyword_weight
         self.semantic_weight = semantic_weight
+        self.min_score = min_score
 
     def search(
         self,
@@ -94,9 +89,7 @@ class KnowledgeRetriever:
 
         query_embedding = self._query_embedding(query)
 
-        scored: list[
-            tuple[float, KnowledgeDocument]
-        ] = []
+        scored: list[tuple[float, KnowledgeDocument]] = []
 
         for document in documents:
             keyword_score = self._keyword_score(
@@ -106,10 +99,7 @@ class KnowledgeRetriever:
 
             semantic_score = 0.0
 
-            if (
-                query_embedding is not None
-                and document.embedding is not None
-            ):
+            if query_embedding is not None and document.embedding is not None:
                 try:
                     semantic_score = cosine_similarity(
                         query_embedding,
@@ -126,20 +116,15 @@ class KnowledgeRetriever:
             else:
                 score = keyword_score
 
-            if score > 0:
-                scored.append(
-                    (score, document)
-                )
+            if score > 0 and score >= self.min_score:
+                scored.append((score, document))
 
         scored.sort(
             key=lambda item: item[0],
             reverse=True,
         )
 
-        return [
-            document
-            for _, document in scored[:limit]
-        ]
+        return [document for _, document in scored[:limit]]
 
     def _query_embedding(
         self,
@@ -170,10 +155,7 @@ class KnowledgeRetriever:
 
         terms = cls._tokenize(query)
 
-        return sum(
-            searchable.count(term)
-            for term in terms
-        )
+        return sum(searchable.count(term) for term in terms)
 
     @staticmethod
     def _tokenize(query: str) -> list[str]:
