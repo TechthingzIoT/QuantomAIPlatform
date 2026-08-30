@@ -23,26 +23,15 @@ def cosine_similarity(
         raise ValueError("Vectors cannot be empty.")
 
     if len(left) != len(right):
-        raise ValueError(
-            "Vectors must have the same dimensionality."
-        )
+        raise ValueError("Vectors must have the same dimensionality.")
 
-    dot_product = sum(
-        a * b
-        for a, b in zip(left, right)
-    )
+    dot_product = sum(a * b for a, b in zip(left, right))
 
-    left_norm = math.sqrt(
-        sum(value * value for value in left)
-    )
+    left_norm = math.sqrt(sum(value * value for value in left))
 
-    right_norm = math.sqrt(
-        sum(value * value for value in right)
-    )
+    right_norm = math.sqrt(sum(value * value for value in right))
 
     if left_norm == 0.0 or right_norm == 0.0:
-        raise ValueError(
-            "Vectors must have non-zero magnitude."
-        )
+        raise ValueError("Vectors must have non-zero magnitude.")
 
     return dot_product / (left_norm * right_norm)
