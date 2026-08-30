@@ -936,6 +936,83 @@ def test_context_builder_returns_empty_for_no_documents():
     assert builder.build([]) == ""
 
 
+def test_context_builder_uses_untitled_and_unknown_defaults():
+    document = KnowledgeDocument(
+        id="defaults",
+        content="Fallback metadata should be used.",
+    )
+
+    builder = KnowledgeContextBuilder()
+
+    context = builder.build([document])
+
+    assert "Title: Untitled" in context
+    assert "Source: Unknown" in context
+    assert "Fallback metadata should be used." in context
+
+
+def test_context_builder_preserves_document_order():
+    documents = [
+        KnowledgeDocument(
+            id="first",
+            title="First",
+            content="First content.",
+        ),
+        KnowledgeDocument(
+            id="second",
+            title="Second",
+            content="Second content.",
+        ),
+    ]
+
+    builder = KnowledgeContextBuilder()
+
+    context = builder.build(documents)
+
+    assert context.index("[Knowledge 1]") < context.index("[Knowledge 2]")
+    assert context.index("First content.") < context.index("Second content.")
+
+
+def test_context_builder_rejects_missing_token_counter():
+    builder = KnowledgeContextBuilder()
+
+    document = KnowledgeDocument(
+        id="token-test",
+        content="Some content.",
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="token_counter is required when max_tokens is provided",
+    ):
+        builder.build(
+            [document],
+            max_tokens=10,
+        )
+
+
+def test_context_builder_does_not_exceed_token_budget():
+    builder = KnowledgeContextBuilder()
+
+    document = KnowledgeDocument(
+        id="token-budget",
+        title="Token Budget",
+        source="test",
+        content="one two three four five six seven eight nine ten",
+    )
+
+    def token_counter(text: str) -> int:
+        return len(text.split())
+
+    context = builder.build(
+        [document],
+        max_tokens=8,
+        token_counter=token_counter,
+    )
+
+    assert token_counter(context) <= 8
+
+
 def test_context_builder_supports_multiple_documents():
     documents = [
         KnowledgeDocument(
