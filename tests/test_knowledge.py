@@ -522,21 +522,21 @@ def test_retriever_min_score_filters_weak_results():
         [
             KnowledgeDocument(
                 id="strong",
-                content="AI infrastructure AI infrastructure.",
+                content="AI infrastructure.",
             ),
             KnowledgeDocument(
                 id="weak",
-                content="AI.",
+                content="AI robotics.",
             ),
         ]
     )
 
     retriever = KnowledgeRetriever(
         store,
-        min_score=2.0,
+        min_score=1.0,
     )
 
-    results = retriever.search("AI")
+    results = retriever.search("AI infrastructure")
 
     assert [document.id for document in results] == ["strong"]
 
@@ -626,11 +626,11 @@ def test_retriever_min_score_is_applied_before_limit():
         [
             KnowledgeDocument(
                 id="strong",
-                content="AI AI infrastructure.",
+                content="AI infrastructure.",
             ),
             KnowledgeDocument(
-                id="weak",
-                content="AI.",
+                id="partial",
+                content="AI robotics.",
             ),
             KnowledgeDocument(
                 id="none",
@@ -641,11 +641,11 @@ def test_retriever_min_score_is_applied_before_limit():
 
     retriever = KnowledgeRetriever(
         store,
-        min_score=2.0,
+        min_score=1.0,
     )
 
     results = retriever.search(
-        "AI",
+        "AI infrastructure",
         limit=1,
     )
 
@@ -731,6 +731,68 @@ def test_retriever_preserves_store_order_for_equal_scores():
         "first",
         "second",
     ]
+
+
+def test_retriever_keyword_score_is_bounded():
+    document = KnowledgeDocument(
+        id="strong",
+        content="AI AI AI AI infrastructure",
+    )
+
+    score = KnowledgeRetriever._keyword_score(
+        document,
+        "AI",
+    )
+
+    assert score == 1.0
+
+
+def test_retriever_keyword_score_is_zero_without_match():
+    document = KnowledgeDocument(
+        id="robotics",
+        content="Robotics systems and actuators.",
+    )
+
+    score = KnowledgeRetriever._keyword_score(
+        document,
+        "AI",
+    )
+
+    assert score == 0.0
+
+
+def test_retriever_keyword_score_rewards_query_term_coverage():
+    document = KnowledgeDocument(
+        id="qair",
+        content="QAIR provides AI inference infrastructure.",
+    )
+
+    partial_score = KnowledgeRetriever._keyword_score(
+        document,
+        "AI robotics",
+    )
+
+    full_score = KnowledgeRetriever._keyword_score(
+        document,
+        "AI infrastructure",
+    )
+
+    assert 0.0 < partial_score < 1.0
+    assert full_score == 1.0
+
+
+def test_retriever_keyword_score_handles_repeated_query_terms():
+    document = KnowledgeDocument(
+        id="ai",
+        content="AI infrastructure.",
+    )
+
+    score = KnowledgeRetriever._keyword_score(
+        document,
+        "AI AI AI",
+    )
+
+    assert score == 1.0
 
 
 def test_retriever_rejects_negative_keyword_weight():

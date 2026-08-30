@@ -142,9 +142,8 @@ class KnowledgeRetriever:
         cls,
         document: KnowledgeDocument,
         query: str,
-    ) -> int:
-        """Calculate deterministic keyword relevance."""
-
+    ) -> float:
+        """Calculate bounded keyword relevance from query-term coverage."""
         searchable = " ".join(
             [
                 document.title or "",
@@ -153,13 +152,15 @@ class KnowledgeRetriever:
             ]
         )
 
-        searchable_terms = cls._tokenize(searchable)
-        query_terms = cls._tokenize(query)
+        searchable_terms = set(cls._tokenize(searchable))
+        query_terms = set(cls._tokenize(query))
 
-        return sum(
-            searchable_terms.count(term)
-            for term in query_terms
-        )
+        if not query_terms:
+            return 0.0
+
+        matched_terms = searchable_terms.intersection(query_terms)
+
+        return len(matched_terms) / len(query_terms)
 
     @staticmethod
     def _tokenize(query: str) -> list[str]:
