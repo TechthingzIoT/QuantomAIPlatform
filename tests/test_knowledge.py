@@ -570,6 +570,169 @@ def test_retriever_rejects_negative_min_score():
         )
 
 
+def test_retriever_keyword_matching_is_case_insensitive():
+    store = KnowledgeStore()
+    store.add(
+        KnowledgeDocument(
+            id="ai",
+            content="Artificial Intelligence infrastructure.",
+        )
+    )
+
+    retriever = KnowledgeRetriever(store)
+
+    results = retriever.search("ARTIFICIAL intelligence")
+
+    assert results
+    assert results[0].id == "ai"
+
+
+def test_retriever_keyword_matching_handles_punctuation():
+    store = KnowledgeStore()
+    store.add(
+        KnowledgeDocument(
+            id="qair",
+            content="QAIR-runtime provides local inference.",
+        )
+    )
+
+    retriever = KnowledgeRetriever(store)
+
+    results = retriever.search("QAIR runtime")
+
+    assert results
+    assert results[0].id == "qair"
+
+
+def test_retriever_does_not_match_keyword_as_substring():
+    store = KnowledgeStore()
+    store.add(
+        KnowledgeDocument(
+            id="unrelated",
+            content="The system contains certain configuration values.",
+        )
+    )
+
+    retriever = KnowledgeRetriever(store)
+
+    results = retriever.search("AI")
+
+    assert results == []
+
+
+def test_retriever_min_score_is_applied_before_limit():
+    store = KnowledgeStore()
+    store.add_many(
+        [
+            KnowledgeDocument(
+                id="strong",
+                content="AI AI infrastructure.",
+            ),
+            KnowledgeDocument(
+                id="weak",
+                content="AI.",
+            ),
+            KnowledgeDocument(
+                id="none",
+                content="Robotics systems.",
+            ),
+        ]
+    )
+
+    retriever = KnowledgeRetriever(
+        store,
+        min_score=2.0,
+    )
+
+    results = retriever.search(
+        "AI",
+        limit=1,
+    )
+
+    assert [document.id for document in results] == ["strong"]
+
+
+def test_retriever_hybrid_handles_documents_without_embeddings():
+    class FakeEmbeddingProvider(EmbeddingProvider):
+        def embed(self, text: str) -> list[float]:
+            return [1.0, 0.0]
+
+    store = KnowledgeStore()
+    store.add_many(
+        [
+            KnowledgeDocument(
+                id="embedded",
+                content="AI infrastructure.",
+                embedding=[1.0, 0.0],
+            ),
+            KnowledgeDocument(
+                id="keyword-only",
+                content="AI robotics infrastructure.",
+            ),
+        ]
+    )
+
+    retriever = KnowledgeRetriever(
+        store,
+        FakeEmbeddingProvider(),
+    )
+
+    results = retriever.search("AI infrastructure")
+
+    assert results
+    assert all(document.id in {"embedded", "keyword-only"} for document in results)
+
+
+def test_retriever_handles_invalid_embedding_dimensions():
+    class FakeEmbeddingProvider(EmbeddingProvider):
+        def embed(self, text: str) -> list[float]:
+            return [1.0, 0.0]
+
+    store = KnowledgeStore()
+    store.add(
+        KnowledgeDocument(
+            id="invalid",
+            content="AI infrastructure.",
+            embedding=[1.0, 0.0, 0.0],
+        )
+    )
+
+    retriever = KnowledgeRetriever(
+        store,
+        FakeEmbeddingProvider(),
+    )
+
+    results = retriever.search("AI infrastructure")
+
+    assert results
+    assert results[0].id == "invalid"
+
+
+def test_retriever_preserves_store_order_for_equal_scores():
+    store = KnowledgeStore()
+    store.add_many(
+        [
+            KnowledgeDocument(
+                id="first",
+                content="AI",
+            ),
+            KnowledgeDocument(
+                id="second",
+                content="AI",
+            ),
+        ]
+    )
+
+    retriever = KnowledgeRetriever(store)
+
+    results = retriever.search("AI")
+
+    assert [document.id for document in results] == [
+        "first",
+        "second",
+    ]
+
+
 def test_retriever_rejects_negative_keyword_weight():
     store = KnowledgeStore()
 

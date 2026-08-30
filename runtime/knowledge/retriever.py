@@ -151,11 +151,15 @@ class KnowledgeRetriever:
                 document.source or "",
                 document.content,
             ]
-        ).lower()
+        )
 
-        terms = cls._tokenize(query)
+        searchable_terms = cls._tokenize(searchable)
+        query_terms = cls._tokenize(query)
 
-        return sum(searchable.count(term) for term in terms)
+        return sum(
+            searchable_terms.count(term)
+            for term in query_terms
+        )
 
     @staticmethod
     def _tokenize(query: str) -> list[str]:
