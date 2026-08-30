@@ -502,6 +502,93 @@ def test_retriever_hybrid_ranking():
         ]
     )
 
+
+def test_retriever_hybrid_score_combines_keyword_and_semantic_scores():
+    class FakeEmbeddingProvider(EmbeddingProvider):
+        def embed(self, text: str) -> list[float]:
+            return [1.0, 0.0]
+
+    store = KnowledgeStore()
+    store.add(
+        KnowledgeDocument(
+            id="hybrid",
+            content="AI infrastructure.",
+            embedding=[1.0, 0.0],
+        )
+    )
+
+    retriever = KnowledgeRetriever(
+        store,
+        FakeEmbeddingProvider(),
+        keyword_weight=0.4,
+        semantic_weight=0.6,
+    )
+
+    results = retriever.search("AI infrastructure")
+
+    assert results
+    assert results[0].id == "hybrid"
+
+
+def test_retriever_hybrid_score_can_be_filtered_by_min_score():
+    class FakeEmbeddingProvider(EmbeddingProvider):
+        def embed(self, text: str) -> list[float]:
+            return [1.0, 0.0]
+
+    store = KnowledgeStore()
+    store.add(
+        KnowledgeDocument(
+            id="hybrid",
+            content="AI infrastructure.",
+            embedding=[1.0, 0.0],
+        )
+    )
+
+    retriever = KnowledgeRetriever(
+        store,
+        FakeEmbeddingProvider(),
+        keyword_weight=0.4,
+        semantic_weight=0.6,
+        min_score=1.0,
+    )
+
+    results = retriever.search("AI infrastructure")
+
+    assert [document.id for document in results] == ["hybrid"]
+
+
+def test_retriever_hybrid_score_respects_weights():
+    class FakeEmbeddingProvider(EmbeddingProvider):
+        def embed(self, text: str) -> list[float]:
+            return [1.0, 0.0]
+
+    store = KnowledgeStore()
+    store.add_many(
+        [
+            KnowledgeDocument(
+                id="semantic",
+                content="Unrelated text.",
+                embedding=[1.0, 0.0],
+            ),
+            KnowledgeDocument(
+                id="keyword",
+                content="AI infrastructure.",
+                embedding=[0.0, 1.0],
+            ),
+        ]
+    )
+
+    retriever = KnowledgeRetriever(
+        store,
+        FakeEmbeddingProvider(),
+        keyword_weight=0.8,
+        semantic_weight=0.2,
+    )
+
+    results = retriever.search("AI infrastructure")
+
+    assert results
+    assert results[0].id == "keyword"
     retriever = KnowledgeRetriever(
         store,
         FakeEmbeddingProvider(),
