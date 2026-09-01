@@ -91,6 +91,7 @@ class QAIRRuntime:
             if knowledge_retriever is not None
             else KnowledgeRetriever(
                 self.knowledge_store,
+                self.embedding_provider,
             )
         )
 

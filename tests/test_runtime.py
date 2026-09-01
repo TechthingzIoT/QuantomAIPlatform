@@ -21,7 +21,7 @@ Author:
 ===========================================================
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -144,6 +144,29 @@ def test_runtime_shares_model_manager_with_engine():
 
     assert runtime.model_manager is custom_manager
     assert runtime.engine.manager is custom_manager
+
+
+def test_runtime_default_retriever_uses_embedding_provider():
+    model_manager = MagicMock()
+    engine = MagicMock()
+    prompt_selector = MagicMock()
+    knowledge_store = MagicMock()
+    embedding_provider = MagicMock()
+
+    with patch.object(
+        QAIRRuntime,
+        "_create_embedding_provider",
+        return_value=embedding_provider,
+    ):
+        runtime = QAIRRuntime(
+            model_manager=model_manager,
+            engine=engine,
+            prompt_selector=prompt_selector,
+            knowledge_store=knowledge_store,
+        )
+
+    assert runtime.embedding_provider is embedding_provider
+    assert runtime.knowledge_retriever.embedding_provider is embedding_provider
 
 
 # ============================================================
