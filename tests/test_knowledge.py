@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -1100,6 +1100,32 @@ def test_knowledge_indexer_generates_embeddings():
         float(len(expected_2)),
         float(len(expected_2.split())),
     ]
+
+
+def test_knowledge_indexer_embeds_title_and_content():
+    provider = MagicMock(spec=EmbeddingProvider)
+    provider.embed_many.return_value = [
+        [1.0, 2.0],
+    ]
+
+    document = KnowledgeDocument(
+        id="doc-1",
+        title="QAIR",
+        content="Local AI runtime.",
+    )
+
+    indexer = KnowledgeIndexer(provider)
+
+    indexed = indexer.index([document])
+
+    provider.embed_many.assert_called_once_with(
+        [
+            "Title: QAIR\nContent:\nLocal AI runtime.",
+        ]
+    )
+
+    assert indexed[0] is document
+    assert document.embedding == [1.0, 2.0]
 
 
 def test_knowledge_indexer_empty_documents():
