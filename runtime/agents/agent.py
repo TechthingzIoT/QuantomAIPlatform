@@ -45,20 +45,19 @@ class Agent:
     # ==================================================
 
     def start(self) -> None:
-        """Start the agent."""
+        """Start the agent and its underlying runtime."""
         if self.running:
             return
-
+        self.runtime.start()
         self.running = True
 
     def stop(self) -> None:
-        """Stop the agent."""
+        """Stop the agent and its underlying runtime."""
         if not self.running:
             return
-
+        self.runtime.stop()
         self.running = False
 
-    # ==================================================
     # Conversation
     # ==================================================
 

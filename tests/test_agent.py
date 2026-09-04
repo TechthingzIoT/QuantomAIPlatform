@@ -46,6 +46,21 @@ def test_agent_start_is_idempotent(agent):
     assert agent.running is True
 
 
+def test_agent_start_delegates_to_runtime(agent, runtime):
+    agent.start()
+
+    runtime.start.assert_called_once_with()
+    assert agent.running is True
+
+
+def test_agent_start_is_idempotent_for_runtime(agent, runtime):
+    agent.start()
+    agent.start()
+
+    runtime.start.assert_called_once_with()
+    assert agent.running is True
+
+
 def test_agent_stop(agent):
     agent.start()
 
@@ -57,6 +72,23 @@ def test_agent_stop(agent):
 def test_agent_stop_is_idempotent(agent):
     agent.stop()
 
+    assert agent.running is False
+
+
+def test_agent_stop_delegates_to_runtime(agent, runtime):
+    agent.start()
+    agent.stop()
+
+    runtime.stop.assert_called_once_with()
+    assert agent.running is False
+
+
+def test_agent_stop_is_idempotent_for_runtime(agent, runtime):
+    agent.start()
+    agent.stop()
+    agent.stop()
+
+    runtime.stop.assert_called_once_with()
     assert agent.running is False
 
 
