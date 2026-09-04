@@ -5,6 +5,8 @@ Provides controlled selection of system prompts for
 different QAIR operating domains.
 """
 
+from typing import ClassVar
+
 from runtime.prompts.manager import PromptManager
 
 
@@ -13,9 +15,9 @@ class PromptSelector:
     Selects and loads QAIR system prompts.
     """
 
-    DEFAULT_PROMPT = "assistant"
+    DEFAULT_PROMPT: ClassVar[str] = "assistant"
 
-    DOMAIN_PROMPTS = {
+    DOMAIN_PROMPTS: ClassVar[set[str]] = {
         "embedded",
         "robotics",
         "agriculture",

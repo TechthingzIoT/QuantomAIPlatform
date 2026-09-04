@@ -6,7 +6,6 @@ from runtime.chat.message import MessageRole
 from runtime.chat.session import ChatSession
 from runtime.prompts.selection import PromptSelector
 
-
 # ============================================================
 # Test Helper
 # ============================================================

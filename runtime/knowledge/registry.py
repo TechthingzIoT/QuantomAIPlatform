@@ -22,20 +22,26 @@ DEFAULT_REGISTRY: dict[str, Any] = {
 }
 
 
+def _default_registry() -> dict[str, Any]:
+    """Return a fresh default registry."""
+    return {
+        "sources": [],
+    }
+
+
 def load_registry() -> dict[str, Any]:
     """Load the knowledge registry from disk."""
     if not REGISTRY_FILE.exists():
-        save_registry(DEFAULT_REGISTRY)
-        return DEFAULT_REGISTRY.copy()
+        save_registry(_default_registry())
+        return _default_registry()
 
     with REGISTRY_FILE.open("r", encoding="utf-8") as file:
         data = yaml.safe_load(file)
 
     if not isinstance(data, dict):
-        data = DEFAULT_REGISTRY.copy()
+        data = _default_registry()
 
     sources = data.get("sources")
-
     if not isinstance(sources, list):
         data["sources"] = []
 
@@ -72,11 +78,10 @@ def add_source(path: str | Path) -> None:
 
 
 def remove_source(path: str | Path) -> None:
-    """Remove a knowledge source directory."""
+    """Remove a registered knowledge source directory."""
     source = str(Path(path).expanduser().resolve())
 
     registry = load_registry()
-
     registry["sources"] = [item for item in registry["sources"] if item != source]
 
     save_registry(registry)
@@ -84,4 +89,4 @@ def remove_source(path: str | Path) -> None:
 
 def clear_sources() -> None:
     """Remove all registered knowledge sources."""
-    save_registry(DEFAULT_REGISTRY.copy())
+    save_registry(_default_registry())

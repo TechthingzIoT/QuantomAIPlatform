@@ -28,7 +28,6 @@ class KnowledgeDocument:
 
     def to_dict(self) -> dict:
         """Convert the document to a serializable dictionary."""
-
         return {
             "id": self.id,
             "content": self.content,
@@ -46,21 +45,17 @@ class KnowledgeDocument:
     def from_dict(
         cls,
         data: dict,
-    ) -> "KnowledgeDocument":
+    ) -> KnowledgeDocument:
         """Create a document from a dictionary."""
-
         if "id" not in data:
             raise ValueError(
                 "Document data missing required field: 'id'."
             )
-
         if "content" not in data:
             raise ValueError(
                 "Document data missing required field: 'content'."
             )
-
         embedding = data.get("embedding")
-
         return cls(
             id=str(data["id"]),
             content=str(data["content"]),

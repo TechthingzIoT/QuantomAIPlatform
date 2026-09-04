@@ -20,12 +20,12 @@ Author:
     TIOTAIROBOTIX
 ===========================================================
 """
-
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from runtime.core.runtime import QAIRRuntime
+from runtime.knowledge.store import KnowledgeStore
 
 # ============================================================
 # Test Fixtures / Helpers
@@ -193,6 +193,77 @@ def test_runtime_start_is_idempotent():
     runtime.start()
 
     engine.load.assert_called_once()
+
+
+def test_runtime_start_loads_and_indexes_registered_knowledge(tmp_path):
+    knowledge_dir = tmp_path / "knowledge"
+    knowledge_dir.mkdir()
+
+    knowledge_file = knowledge_dir / "rwanda.md"
+    knowledge_file.write_text(
+        "# Rwanda AI\n\n" "Rwanda is building an AI innovation ecosystem.",
+        encoding="utf-8",
+    )
+
+    model_manager = MagicMock()
+    engine = MagicMock()
+    prompt_selector = MagicMock()
+    knowledge_store = KnowledgeStore()
+
+    embedding_provider = MagicMock()
+    embedding_provider.embed_many.return_value = [
+        [0.1, 0.2, 0.3],
+    ]
+
+    model_manager.list_models.return_value = [MagicMock()]
+    model_manager.active_model.return_value = MagicMock()
+
+    with (
+        patch.object(
+            QAIRRuntime,
+            "_create_embedding_provider",
+            return_value=embedding_provider,
+        ),
+        patch(
+            "runtime.core.runtime.list_sources",
+            return_value=[knowledge_dir],
+        ),
+    ):
+        runtime = QAIRRuntime(
+            model_manager=model_manager,
+            engine=engine,
+            prompt_selector=prompt_selector,
+            knowledge_store=knowledge_store,
+        )
+
+        runtime.start()
+
+    documents = knowledge_store.all()
+
+    assert len(documents) == 1
+
+    document = documents[0]
+
+    assert document.title == "Rwanda AI"
+    assert document.content == (
+    "# Rwanda AI\n\n"
+    "Rwanda is building an AI innovation ecosystem."
+)
+    assert document.embedding == [0.1, 0.2, 0.3]
+
+    embedding_provider.embed_many.assert_called_once_with(
+        [
+            (
+                "Title: Rwanda AI\n"
+                "Content:\n"
+                "# Rwanda AI\n\n"
+                "Rwanda is building an AI innovation ecosystem."
+            )
+        ]
+    )
+
+    engine.load.assert_called_once()
+    assert runtime.running is True
 
 
 def test_runtime_start_without_models_fails():

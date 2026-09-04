@@ -3,14 +3,20 @@
 QAIR Inference Engine
 =========================================================
 
-Thin abstraction over the underlying language model.
+High-level inference orchestration for QAIR.
 
 Responsibilities
 ----------------
-• Load the active model
+
+• Select the active model
+• Coordinate the inference backend
 • Generate responses
 • Reload models
 • Expose runtime information
+
+The engine intentionally does not depend on a specific
+inference implementation. Backend-specific behavior is
+provided through the InferenceBackend contract.
 
 Author:
     TIOTAIROBOTIX
@@ -19,9 +25,9 @@ Author:
 
 from __future__ import annotations
 
-from llama_cpp import Llama
-
 from runtime.config.settings import settings
+from runtime.inference.backend import InferenceBackend
+from runtime.inference.llama_cpp import LlamaCppBackend
 from runtime.models.manager import ModelManager
 from runtime.models.model import Model
 
@@ -30,22 +36,31 @@ class InferenceEngine:
     """
     QAIR inference engine.
 
-    This class owns the loaded language model and provides
-    a simple interface for text generation.
+    The engine coordinates model selection and delegates
+    inference operations to an InferenceBackend.
+
+    By default, QAIR uses LlamaCppBackend so existing
+    local GGUF inference behavior remains unchanged.
     """
 
     def __init__(
         self,
         *,
         model_manager: ModelManager | None = None,
+        backend: InferenceBackend | None = None,
     ) -> None:
         self.settings = settings
 
         # Preserve an explicitly injected model manager.
-        # Only create the default manager when none was supplied.
-        self.manager = model_manager if model_manager is not None else ModelManager()
+        self.manager = (
+            model_manager if model_manager is not None else ModelManager()
+        )
 
-        self._model: Llama | None = None
+        # Preserve an explicitly injected backend.
+        self.backend = (
+            backend if backend is not None else LlamaCppBackend(self.settings)
+        )
+
         self._model_info: Model | None = None
 
     # ==================================================
@@ -54,28 +69,20 @@ class InferenceEngine:
 
     def load(self) -> None:
         """
-        Load the currently active model.
+        Load the currently active model through the backend.
         """
-
         active = self.manager.active_model()
 
         if active is None:
             raise RuntimeError("No active model selected.")
 
+        self.backend.load(active)
         self._model_info = active
-
-        self._model = Llama(
-            model_path=str(active.path),
-            n_ctx=self.settings.context_size,
-            n_gpu_layers=self.settings.gpu_layers,
-            verbose=self.settings.verbose,
-        )
 
     def reload(self) -> None:
         """
         Reload the active model.
         """
-
         self.unload()
         self.load()
 
@@ -83,8 +90,7 @@ class InferenceEngine:
         """
         Release the loaded model.
         """
-
-        self._model = None
+        self.backend.unload()
         self._model_info = None
 
     # ==================================================
@@ -96,20 +102,18 @@ class InferenceEngine:
         """
         Whether a model is currently loaded.
         """
-
-        return self._model is not None
+        return self.backend.loaded
 
     @property
     def model(self) -> Model | None:
         """
         Return loaded model metadata.
         """
-
         return self._model_info
 
     def count_tokens(self, text: str) -> int:
         """
-        Count tokens using the currently loaded model tokenizer.
+        Count tokens using the active backend.
 
         The model is loaded lazily when necessary.
         """
@@ -119,14 +123,7 @@ class InferenceEngine:
         if not self.loaded:
             self.load()
 
-        assert self._model is not None
-
-        return len(
-            self._model.tokenize(
-                text.encode("utf-8"),
-                add_bos=False,
-            )
-        )
+        return self.backend.count_tokens(text)
 
     # ==================================================
     # Generation
@@ -141,33 +138,29 @@ class InferenceEngine:
         top_p: float | None = None,
     ) -> str:
         """
-        Generate a response using the model's native
-        chat completion API.
+        Generate a response through the active backend.
         """
-
         if not self.loaded:
             self.load()
-
-        assert self._model is not None
 
         actual_max_tokens = (
             self.settings.max_tokens if max_tokens is None else max_tokens
         )
 
         actual_temperature = (
-            self.settings.temperature if temperature is None else temperature
+            self.settings.temperature
+            if temperature is None
+            else temperature
         )
 
         actual_top_p = self.settings.top_p if top_p is None else top_p
 
-        response = self._model.create_chat_completion(
-            messages=messages,
+        return self.backend.generate(
+            messages,
             max_tokens=actual_max_tokens,
             temperature=actual_temperature,
             top_p=actual_top_p,
         )
-
-        return response["choices"][0]["message"]["content"].strip()
 
     # ==================================================
     # Runtime Information
@@ -177,7 +170,6 @@ class InferenceEngine:
         """
         Runtime summary.
         """
-
         return {
             "loaded": self.loaded,
             "model": self.model.name if self.model else None,
