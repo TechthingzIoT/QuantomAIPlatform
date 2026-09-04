@@ -14,6 +14,8 @@ from __future__ import annotations
 from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
+from runtime.tools.registry import ToolRegistry
+from runtime.tools.validation import validate_tool_arguments
 
 
 class Agent:
@@ -27,6 +29,7 @@ class Agent:
         runtime: QAIRRuntime | None = None,
         history: ConversationHistory | None = None,
         name: str = DEFAULT_NAME,
+        tool_registry: ToolRegistry | None = None,
     ) -> None:
         if not isinstance(name, str):
             raise TypeError("name must be a string.")
@@ -38,6 +41,9 @@ class Agent:
         self.name = name
         self.runtime = runtime if runtime is not None else QAIRRuntime()
         self.history = history if history is not None else ConversationHistory()
+        self.tool_registry = (
+            tool_registry if tool_registry is not None else ToolRegistry()
+        )
         self.running = False
 
     # ==================================================
@@ -106,6 +112,15 @@ class Agent:
         self.history.add(assistant_message)
 
         return response
+
+    def execute_tool(self, name: str, arguments: dict) -> object:
+        """Validate and execute a registered tool by name."""
+        tool = self.tool_registry.get(name)
+        if tool is None:
+            raise ValueError(f"Unknown tool: {name}")
+
+        validate_tool_arguments(tool, arguments)
+        return tool.execute(arguments)
 
     def run(self, prompt: str) -> str:
         """
