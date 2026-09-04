@@ -19,6 +19,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from runtime.agents.agent import Agent
 from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
@@ -66,6 +67,12 @@ class ChatSession:
         # --------------------------------------------------
 
         self.history = ConversationHistory()
+        # Agent owns execution while sharing the session's
+        # runtime and conversation history.
+        self.agent = Agent(
+            runtime=self.runtime,
+            history=self.history,
+        )
 
         # --------------------------------------------------
         # Prompt management
@@ -268,40 +275,33 @@ class ChatSession:
 
     def ask(self, prompt: str) -> str:
         """
-        Send a user message to the inference engine.
+        Send a user message through the QAIR Agent.
 
-        The complete structured conversation history,
-        including the system message, is sent to the
-        inference engine.
+        Normal prompts are delegated to the Agent, which owns
+        conversation orchestration and runtime execution.
+
+        The empty-string path preserves the legacy ChatSession
+        API contract without weakening Agent input validation.
         """
+        if prompt == "":
+            user_message = ChatMessage(
+                role=MessageRole.USER,
+                content=prompt,
+            )
+            self.history.add(user_message)
+            messages = self.history.to_messages()
+            reply = self.runtime.generate(
+                messages,
+                use_knowledge=True,
+            )
+            assistant_message = ChatMessage(
+                role=MessageRole.ASSISTANT,
+                content=reply,
+            )
+            self.history.add(assistant_message)
+            return reply
 
-        # Preserve the historical behavior expected by
-        # the existing test suite: even an empty string is
-        # recorded as a user message.
-        user_message = ChatMessage(
-            role=MessageRole.USER,
-            content=prompt,
-        )
-
-        self.history.add(user_message)
-
-        messages = self.history.to_messages()
-
-        # Route normal chat through QAIRRuntime so the configured
-        # knowledge retrieval/RAG pipeline can augment inference.
-        reply = self.runtime.generate(
-            messages,
-            use_knowledge=True,
-        )
-
-        assistant_message = ChatMessage(
-            role=MessageRole.ASSISTANT,
-            content=reply,
-        )
-
-        self.history.add(assistant_message)
-
-        return reply
+        return self.agent.run(prompt)
 
     # ======================================================
     # Utilities

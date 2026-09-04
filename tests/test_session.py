@@ -66,6 +66,41 @@ def test_session_initialization():
 
 
 # ============================================================
+# Agent Integration
+# ============================================================
+
+def test_session_creates_agent():
+    session = make_session()
+
+    from runtime.agents.agent import Agent
+
+    assert isinstance(session.agent, Agent)
+
+
+def test_session_agent_shares_runtime():
+    session = make_session()
+
+    assert session.agent.runtime is session.runtime
+
+
+def test_session_agent_shares_history():
+    session = make_session()
+
+    assert session.agent.history is session.history
+
+
+def test_ask_delegates_to_agent():
+    session = make_session()
+    session.agent = MagicMock()
+    session.agent.run.return_value = "Agent response."
+
+    response = session.ask("Hello")
+
+    assert response == "Agent response."
+    session.agent.run.assert_called_once_with("Hello")
+
+
+# ============================================================
 # Conversation
 # ============================================================
 
