@@ -41,18 +41,16 @@ def registry():
 def agent(registry):
     return Agent(
         runtime=MagicMock(),
-    )
-
-
-def test_execute_tool_returns_tool_result(registry):
-    agent = Agent(
-        runtime=MagicMock(),
         tool_registry=registry,
     )
 
+
+def test_execute_tool_returns_tool_result(agent):
     result = agent.execute_tool(
-        "echo",
-        {"message": "hello"},
+        {
+            "name": "echo",
+            "arguments": {"message": "hello"},
+        }
     )
 
     assert result == {"echo": "hello"}
@@ -60,27 +58,34 @@ def test_execute_tool_returns_tool_result(registry):
 
 def test_execute_tool_rejects_unknown_tool():
     registry = ToolRegistry()
+
     agent = Agent(
         runtime=MagicMock(),
         tool_registry=registry,
     )
 
     with pytest.raises(ValueError, match="Unknown tool"):
-        agent.execute_tool("missing", {})
+        agent.execute_tool(
+            {
+                "name": "missing",
+                "arguments": {},
+            }
+        )
 
 
-def test_execute_tool_validates_arguments(registry):
-    agent = Agent(
-        runtime=MagicMock(),
-        tool_registry=registry,
-    )
-
+def test_execute_tool_validates_arguments(agent):
     with pytest.raises(ValueError, match="Missing required argument"):
-        agent.execute_tool("echo", {})
+        agent.execute_tool(
+            {
+                "name": "echo",
+                "arguments": {},
+            }
+        )
 
 
 def test_execute_tool_does_not_execute_when_validation_fails():
     tool = MagicMock(spec=Tool)
+
     type(tool).name = property(lambda self: "echo")
     type(tool).description = property(lambda self: "Echo.")
     type(tool).input_schema = property(
@@ -102,13 +107,19 @@ def test_execute_tool_does_not_execute_when_validation_fails():
     )
 
     with pytest.raises(ValueError, match="Missing required argument"):
-        agent.execute_tool("echo", {})
+        agent.execute_tool(
+            {
+                "name": "echo",
+                "arguments": {},
+            }
+        )
 
     tool.execute.assert_not_called()
 
 
 def test_execute_tool_passes_arguments_unchanged():
     tool = MagicMock(spec=Tool)
+
     type(tool).name = property(lambda self: "echo")
     type(tool).description = property(lambda self: "Echo.")
     type(tool).input_schema = property(
@@ -120,6 +131,7 @@ def test_execute_tool_passes_arguments_unchanged():
             "required": ["message"],
         }
     )
+
     tool.execute.return_value = "ok"
 
     registry = ToolRegistry()
@@ -132,10 +144,21 @@ def test_execute_tool_passes_arguments_unchanged():
 
     arguments = {"message": "hello"}
 
-    result = agent.execute_tool("echo", arguments)
+    result = agent.execute_tool(
+        {
+            "name": "echo",
+            "arguments": arguments,
+        }
+    )
 
     assert result == "ok"
     tool.execute.assert_called_once_with(arguments)
+
+
+def test_execute_tool_accepts_json_payload(agent):
+    result = agent.execute_tool('{"name": "echo", "arguments": {"message": "hello"}}')
+
+    assert result == {"echo": "hello"}
 
 
 def test_agent_uses_injected_tool_registry(registry):

@@ -14,6 +14,7 @@ from __future__ import annotations
 from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
+from runtime.tools.protocol import parse_tool_call
 from runtime.tools.registry import ToolRegistry
 from runtime.tools.validation import validate_tool_arguments
 
@@ -113,14 +114,19 @@ class Agent:
 
         return response
 
-    def execute_tool(self, name: str, arguments: dict) -> object:
-        """Validate and execute a registered tool by name."""
-        tool = self.tool_registry.get(name)
-        if tool is None:
-            raise ValueError(f"Unknown tool: {name}")
+    def execute_tool(self, payload: object) -> object:
+        """Parse, validate, and execute a registered tool call."""
 
-        validate_tool_arguments(tool, arguments)
-        return tool.execute(arguments)
+        tool_call = parse_tool_call(payload)
+
+        tool = self.tool_registry.get(tool_call.name)
+
+        if tool is None:
+            raise ValueError(f"Unknown tool: {tool_call.name}")
+
+        validate_tool_arguments(tool, tool_call.arguments)
+
+        return tool.execute(tool_call.arguments)
 
     def run(self, prompt: str) -> str:
         """
