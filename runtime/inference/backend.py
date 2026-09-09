@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from runtime.inference.response import InferenceResponse
 from runtime.models.model import Model
 
 
@@ -75,8 +76,8 @@ class InferenceBackend(ABC):
         max_tokens: int,
         temperature: float,
         top_p: float,
-    ) -> str:
+    ) -> InferenceResponse:
         """
-        Generate a response from conversational messages.
+        Generate a provider-neutral response from conversational messages.
         """
         raise NotImplementedError

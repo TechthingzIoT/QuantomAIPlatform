@@ -17,6 +17,7 @@ from llama_cpp import Llama
 
 from runtime.config.settings import QAIRSettings, settings
 from runtime.inference.backend import InferenceBackend
+from runtime.inference.response import InferenceResponse
 from runtime.models.model import Model
 
 
@@ -93,7 +94,7 @@ class LlamaCppBackend(InferenceBackend):
         max_tokens: int,
         temperature: float,
         top_p: float,
-    ) -> str:
+    ) -> InferenceResponse:
         """
         Generate a response using llama.cpp chat completion.
         """
@@ -109,4 +110,8 @@ class LlamaCppBackend(InferenceBackend):
             top_p=top_p,
         )
 
-        return response["choices"][0]["message"]["content"].strip()
+        content = response["choices"][0]["message"]["content"]
+
+        return InferenceResponse(
+            content=content.strip() if content else None,
+        )

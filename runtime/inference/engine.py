@@ -28,6 +28,7 @@ from __future__ import annotations
 from runtime.config.settings import settings
 from runtime.inference.backend import InferenceBackend
 from runtime.inference.llama_cpp import LlamaCppBackend
+from runtime.inference.response import InferenceResponse
 from runtime.models.manager import ModelManager
 from runtime.models.model import Model
 
@@ -136,9 +137,9 @@ class InferenceEngine:
         max_tokens: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
-    ) -> str:
+    ) -> InferenceResponse:
         """
-        Generate a response through the active backend.
+        Generate a provider-neutral response through the active backend.
         """
         if not self.loaded:
             self.load()

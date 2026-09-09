@@ -106,7 +106,8 @@ def test_backend_generate(backend, model):
             top_p=0.8,
         )
 
-    assert result == "Hello from QAIR!"
+    assert result.content == "Hello from QAIR!"
+    assert result.tool_calls == []
 
     llama.create_chat_completion.assert_called_once_with(
         messages=messages,
