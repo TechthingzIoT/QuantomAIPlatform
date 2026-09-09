@@ -4,12 +4,13 @@ import pytest
 
 from runtime.agents.agent import Agent
 from runtime.chat.message import ChatMessage, MessageRole
+from runtime.inference.response import InferenceResponse
 
 
 @pytest.fixture
 def runtime():
     runtime = MagicMock()
-    runtime.generate.return_value = "Hello from QAIR."
+    runtime.generate.return_value = InferenceResponse(content="Hello from QAIR.")
     return runtime
 
 
@@ -229,7 +230,7 @@ def test_agent_integrates_with_real_runtime():
     engine.settings.max_tokens = 256
     engine.settings.context_size = 2048
     engine.count_tokens.return_value = 1
-    engine.generate.return_value = "Integrated response."
+    engine.generate.return_value = InferenceResponse(content="Integrated response.")
 
     retriever = MagicMock()
     retriever.search.return_value = []

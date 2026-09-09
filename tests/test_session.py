@@ -4,6 +4,7 @@ import pytest
 
 from runtime.chat.message import MessageRole
 from runtime.chat.session import ChatSession
+from runtime.inference.response import InferenceResponse
 from runtime.prompts.selection import PromptSelector
 
 # ============================================================
@@ -23,7 +24,7 @@ def make_session(prompt_selector=None):
 
         engine = engine_class.return_value
 
-        engine.generate.return_value = "Hello from QAIR."
+        engine.generate.return_value = InferenceResponse(content="Hello from QAIR.")
 
         engine.summary.return_value = {
             "loaded": True,
@@ -493,4 +494,4 @@ def test_prompt_command_invalid_prompt():
     assert handled is True
     assert session.active_prompt == "assistant"
 
-   
+

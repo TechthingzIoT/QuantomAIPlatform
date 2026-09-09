@@ -106,13 +106,21 @@ class Agent:
             use_knowledge=True,
         )
 
+        content = response.content
+
+        if content is None:
+            raise RuntimeError(
+                "Inference response did not contain assistant content."
+            )
+
         assistant_message = ChatMessage(
             role=MessageRole.ASSISTANT,
-            content=response,
+            content=content,
         )
+
         self.history.add(assistant_message)
 
-        return response
+        return content
 
     def execute_tool(self, payload: object) -> object:
         """Parse, validate, and execute a registered tool call."""

@@ -17,6 +17,7 @@ from typing import Self
 
 from runtime.config.settings import settings
 from runtime.inference.engine import InferenceEngine
+from runtime.inference.response import InferenceResponse
 from runtime.knowledge.context import KnowledgeContextBuilder
 from runtime.knowledge.indexer import KnowledgeIndexer
 from runtime.knowledge.llama_embeddings import LlamaEmbeddingProvider
@@ -330,9 +331,9 @@ class QAIRRuntime:
         top_p: float | None = None,
         use_knowledge: bool = False,
         knowledge_limit: int = 5,
-    ) -> str:
+    ) -> InferenceResponse:
         """
-        Generate a response through the QAIR runtime.
+        Generate a provider-neutral response through the QAIR runtime.
 
         When ``use_knowledge`` is False, inference follows
         the existing direct inference path.

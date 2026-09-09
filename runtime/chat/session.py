@@ -290,16 +290,23 @@ class ChatSession:
             )
             self.history.add(user_message)
             messages = self.history.to_messages()
-            reply = self.runtime.generate(
+            response = self.runtime.generate(
                 messages,
                 use_knowledge=True,
             )
+            content = response.content
+
+            if content is None:
+                raise RuntimeError(
+                    "Inference response did not contain assistant content."
+                )
+
             assistant_message = ChatMessage(
                 role=MessageRole.ASSISTANT,
-                content=reply,
+                content=content,
             )
             self.history.add(assistant_message)
-            return reply
+            return content
 
         return self.agent.run(prompt)
 
