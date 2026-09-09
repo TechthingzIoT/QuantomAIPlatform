@@ -4,7 +4,9 @@ QAIR Chat Message
 Conversation message models used by the QAIR runtime.
 
 Responsibilities
+
 ----------------
+
 - Represent chat messages
 - Standardize conversation roles
 - Provide serialization helpers
@@ -22,6 +24,7 @@ class MessageRole(str, Enum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
+    TOOL = "tool"
 
 
 @dataclass(slots=True)
