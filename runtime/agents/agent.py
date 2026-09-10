@@ -11,6 +11,8 @@ augmentation.
 
 from __future__ import annotations
 
+import json
+
 from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
@@ -173,9 +175,17 @@ class Agent:
     ) -> None:
         """Record a tool execution result in conversation history."""
 
+        if isinstance(result, str):
+            content = result
+        else:
+            try:
+                content = json.dumps(result)
+            except (TypeError, ValueError):
+                content = str(result)
+
         tool_message = ChatMessage(
             role=MessageRole.TOOL,
-            content=str(result),
+            content=content,
             tool_call_id=tool_call.id,
         )
 
