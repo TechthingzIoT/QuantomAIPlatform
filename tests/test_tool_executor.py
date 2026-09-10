@@ -123,3 +123,29 @@ def test_executor_returns_execution_failure():
     assert result.error_type == "RuntimeError"
 
     assert result.error_message == "Tool exploded"
+
+
+def test_executor_accepts_optional_execution_context():
+    from runtime.tools.context import ToolExecutionContext
+    from runtime.tools.protocol import ToolCall
+
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+
+    executor = ToolExecutor(registry)
+
+    context = ToolExecutionContext(
+        tool_call_id="call_1",
+        agent_name="qair-agent",
+    )
+
+    result = executor.execute(
+        ToolCall(
+            name="echo",
+            arguments={"text": "hello"},
+        ),
+        context=context,
+    )
+
+    assert result.ok is True
+    assert result.result == "hello"

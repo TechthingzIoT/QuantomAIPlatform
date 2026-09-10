@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import time
 
-from typing import Any
-
+from runtime.tools.context import ToolExecutionContext
 from runtime.tools.protocol import ToolCall
 from runtime.tools.registry import ToolRegistry
 from runtime.tools.result import ToolExecutionResult
@@ -16,7 +15,12 @@ class ToolExecutor:
     def __init__(self, registry: ToolRegistry) -> None:
         self.registry = registry
 
-    def execute(self, tool_call: ToolCall) -> ToolExecutionResult:
+    def execute(
+        self,
+        tool_call: ToolCall,
+        *,
+        context: ToolExecutionContext | None = None,
+    ) -> ToolExecutionResult:
         """Execute a validated tool call and return a structured result."""
 
         started_at = time.perf_counter()
@@ -33,6 +37,10 @@ class ToolExecutor:
                 tool,
                 tool_call.arguments,
             )
+
+            # Context is intentionally introduced at the executor
+            # boundary without changing the existing tool API.
+            _ = context
 
             result = tool.execute(tool_call.arguments)
 
