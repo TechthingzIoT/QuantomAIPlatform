@@ -326,6 +326,7 @@ class QAIRRuntime:
         self,
         messages: list[dict],
         *,
+        tools: list[dict] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
@@ -417,6 +418,7 @@ class QAIRRuntime:
 
         return self.engine.generate(
             inference_messages,
+            tools=tools,
             max_tokens=max_tokens,
             temperature=temperature,
             top_p=top_p,

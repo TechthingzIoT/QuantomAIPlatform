@@ -446,6 +446,46 @@ def test_runtime_summary():
 # ============================================================
 
 
+def test_runtime_generate_propagates_tools():
+    runtime, _, engine, _ = make_runtime()
+
+    runtime.start()
+
+    messages = [
+        {
+            "role": "user",
+            "content": "What tools can you use?",
+        }
+    ]
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_lab_status",
+                "description": "Return the current lab status.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        }
+    ]
+
+    runtime.generate(
+        messages,
+        tools=tools,
+    )
+
+    engine.generate.assert_called_once_with(
+        messages,
+        tools=tools,
+        max_tokens=None,
+        temperature=None,
+        top_p=None,
+    )
+
+
 def test_runtime_generate_without_knowledge_preserves_messages():
     runtime, _, engine, _ = make_runtime()
 
@@ -462,6 +502,7 @@ def test_runtime_generate_without_knowledge_preserves_messages():
 
     engine.generate.assert_called_once_with(
         messages,
+        tools=None,
         max_tokens=None,
         temperature=None,
         top_p=None,
@@ -684,6 +725,7 @@ def test_runtime_generate_with_knowledge_without_results_uses_original_messages(
 
     engine.generate.assert_called_once_with(
         messages,
+        tools=None,
         max_tokens=None,
         temperature=None,
         top_p=None,

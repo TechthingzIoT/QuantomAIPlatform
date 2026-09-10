@@ -210,9 +210,11 @@ class Agent:
 
         for _ in range(self.MAX_TOOL_ITERATIONS):
             messages = self.history.to_messages()
+            tools = self.tool_registry.definitions() or None
 
             response = self.runtime.generate(
                 messages,
+                tools=tools,
                 use_knowledge=True,
             )
 

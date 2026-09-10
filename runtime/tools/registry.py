@@ -13,6 +13,7 @@ class ToolRegistry:
         """Register a tool by its name."""
         if tool.name in self._tools:
             raise ValueError(f"Tool {tool.name!r} is already registered")
+
         self._tools[tool.name] = tool
 
     def unregister(self, name: str) -> None:
@@ -29,11 +30,27 @@ class ToolRegistry:
 
     def definitions(self) -> list[dict]:
         """Return model-facing definitions for registered tools."""
+        definitions = []
 
-        return [
-            tool.to_definition()
-            for tool in self._tools.values()
-        ]
+        for tool in self._tools.values():
+            to_definition = getattr(tool, "to_definition", None)
+
+            if callable(to_definition):
+                definitions.append(to_definition())
+                continue
+
+            definitions.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": dict(tool.input_schema),
+                    },
+                }
+            )
+
+        return definitions
 
     def list(self) -> list[Tool]:
         """Return registered tools in registration order."""

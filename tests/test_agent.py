@@ -134,6 +134,63 @@ def test_agent_run_delegates_to_runtime(agent, runtime):
                 "content": "Hello",
             }
         ],
+        tools=None,
+        use_knowledge=True,
+    )
+
+
+def test_agent_run_propagates_registered_tools_to_runtime(runtime):
+    class LabStatusTool:
+        name = "get_lab_status"
+        description = "Return the current lab status."
+        input_schema = {
+            "type": "object",
+            "properties": {},
+        }
+
+        def to_definition(self):
+            return {
+                "type": "function",
+                "function": {
+                    "name": self.name,
+                    "description": self.description,
+                    "parameters": self.input_schema,
+                },
+            }
+
+        def execute(self, arguments):
+            return "Lab operational."
+
+    registry = ToolRegistry()
+    registry.register(LabStatusTool())
+
+    agent = Agent(
+        runtime=runtime,
+        tool_registry=registry,
+    )
+
+    agent.run("What is the lab status?")
+
+    runtime.generate.assert_called_once_with(
+        [
+            {
+                "role": "user",
+                "content": "What is the lab status?",
+            }
+        ],
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_lab_status",
+                    "description": "Return the current lab status.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+            }
+        ],
         use_knowledge=True,
     )
 
@@ -257,6 +314,7 @@ def test_agent_integrates_with_real_runtime():
                 "content": "Test integration",
             }
         ],
+        tools=None,
         max_tokens=None,
         temperature=None,
         top_p=None,
