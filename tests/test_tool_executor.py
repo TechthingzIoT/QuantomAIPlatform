@@ -149,3 +149,91 @@ def test_executor_accepts_optional_execution_context():
 
     assert result.ok is True
     assert result.result == "hello"
+
+
+class ContextAwareEchoTool:
+
+    name = "context_echo"
+
+    description = "Echo text with execution context."
+
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "text": {
+                "type": "string",
+            },
+        },
+        "required": ["text"],
+    }
+
+    @property
+    def supports_context(self):
+        return True
+
+    def execute(self, arguments, *, context=None):
+        return {
+            "text": arguments["text"],
+            "tool_call_id": (
+                context.tool_call_id
+                if context is not None
+                else None
+            ),
+            "agent_name": (
+                context.agent_name
+                if context is not None
+                else None
+            ),
+        }
+
+
+def test_executor_passes_context_to_context_aware_tool():
+
+    from runtime.tools.context import ToolExecutionContext
+
+    registry = ToolRegistry()
+
+    registry.register(ContextAwareEchoTool())
+
+    executor = ToolExecutor(registry)
+
+    context = ToolExecutionContext(
+        tool_call_id="call_42",
+        agent_name="qair-agent",
+    )
+
+    result = executor.execute(
+        ToolCall(
+            name="context_echo",
+            arguments={"text": "hello"},
+        ),
+        context=context,
+    )
+
+    assert result.ok is True
+
+    assert result.result == {
+        "text": "hello",
+        "tool_call_id": "call_42",
+        "agent_name": "qair-agent",
+    }
+
+
+def test_executor_keeps_legacy_tool_api_unchanged():
+
+    registry = ToolRegistry()
+
+    registry.register(EchoTool())
+
+    executor = ToolExecutor(registry)
+
+    result = executor.execute(
+        ToolCall(
+            name="echo",
+            arguments={"text": "legacy"},
+        ),
+    )
+
+    assert result.ok is True
+
+    assert result.result == "legacy"

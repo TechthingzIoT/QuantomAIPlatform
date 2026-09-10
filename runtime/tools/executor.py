@@ -38,11 +38,17 @@ class ToolExecutor:
                 tool_call.arguments,
             )
 
-            # Context is intentionally introduced at the executor
-            # boundary without changing the existing tool API.
-            _ = context
-
-            result = tool.execute(tool_call.arguments)
+            if context is not None and getattr(
+                tool,
+                "supports_context",
+                False,
+            ):
+                result = tool.execute(
+                    tool_call.arguments,
+                    context=context,
+                )
+            else:
+                result = tool.execute(tool_call.arguments)
 
             return ToolExecutionResult.success(result)
 

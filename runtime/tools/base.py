@@ -37,6 +37,11 @@ class Tool(ABC):
             },
         }
 
+    @property
+    def supports_context(self) -> bool:
+        """Return whether this tool accepts execution context."""
+        return False
+
     @abstractmethod
     def execute(self, arguments: dict[str, Any]) -> Any:
         """Execute the tool with the supplied arguments."""
