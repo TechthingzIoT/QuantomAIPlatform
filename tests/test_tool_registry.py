@@ -93,3 +93,31 @@ def test_registry_unregister_missing_tool_is_safe():
     registry.unregister("missing")
 
     assert registry.list() == []
+
+
+def test_registry_returns_empty_definitions():
+
+    registry = ToolRegistry()
+
+    assert registry.definitions() == []
+
+
+def test_registry_returns_model_facing_definitions():
+
+    registry = ToolRegistry()
+
+    registry.register(ExampleTool())
+
+    assert registry.definitions() == [
+        {
+            "type": "function",
+            "function": {
+                "name": "example",
+                "description": "An example tool.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        }
+    ]

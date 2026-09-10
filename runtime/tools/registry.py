@@ -27,6 +27,14 @@ class ToolRegistry:
         """Return whether a tool is registered under the given name."""
         return name in self._tools
 
+    def definitions(self) -> list[dict]:
+        """Return model-facing definitions for registered tools."""
+
+        return [
+            tool.to_definition()
+            for tool in self._tools.values()
+        ]
+
     def list(self) -> list[Tool]:
         """Return registered tools in registration order."""
         return list(self._tools.values())

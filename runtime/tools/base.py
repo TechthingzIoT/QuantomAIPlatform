@@ -25,6 +25,18 @@ class Tool(ABC):
         """Return the model-facing input schema."""
         raise NotImplementedError
 
+    def to_definition(self) -> dict[str, Any]:
+        """Return an OpenAI-compatible function definition."""
+
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": dict(self.input_schema),
+            },
+        }
+
     @abstractmethod
     def execute(self, arguments: dict[str, Any]) -> Any:
         """Execute the tool with the supplied arguments."""
