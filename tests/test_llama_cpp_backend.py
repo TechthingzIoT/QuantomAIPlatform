@@ -203,3 +203,82 @@ def test_backend_implements_inference_backend_contract(backend):
     from runtime.inference.backend import InferenceBackend
 
     assert isinstance(backend, InferenceBackend)
+
+
+def test_backend_generate_normalizes_qair_tool_call_messages(
+    backend,
+    model,
+):
+
+    llama = MagicMock()
+
+    llama.create_chat_completion.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": "The lab is operational.",
+                }
+            }
+        ]
+    }
+
+    with patch(
+        "runtime.inference.llama_cpp.Llama",
+        return_value=llama,
+    ):
+        backend.load(model)
+
+    messages = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "name": "get_lab_status",
+                    "arguments": {},
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "content": "Lab operational.",
+            "tool_call_id": "call_1",
+        },
+    ]
+
+    result = backend.generate(
+        messages,
+        max_tokens=128,
+        temperature=0.2,
+        top_p=0.8,
+    )
+
+    assert result.content == "The lab is operational."
+
+    llama.create_chat_completion.assert_called_once_with(
+        messages=[
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "get_lab_status",
+                            "arguments": "{}",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "content": "Lab operational.",
+                "tool_call_id": "call_1",
+            },
+        ],
+        max_tokens=128,
+        temperature=0.2,
+        top_p=0.8,
+    )

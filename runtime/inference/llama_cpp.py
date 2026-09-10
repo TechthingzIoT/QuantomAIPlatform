@@ -13,6 +13,9 @@ Author:
 
 from __future__ import annotations
 
+import json
+import re
+
 from llama_cpp import Llama
 
 from runtime.config.settings import QAIRSettings, settings
@@ -90,6 +93,132 @@ class LlamaCppBackend(InferenceBackend):
             )
         )
 
+    def _parse_text_tool_calls(
+        self,
+        content: str | None,
+    ) -> tuple[str | None, list[ToolCallRequest]]:
+        """
+        Parse Qwen-style textual tool calls.
+
+        Some GGUF/chat-template combinations return tool calls as:
+
+            <tool_call>
+            {"name": "tool_name", "arguments": {...}}
+            </tool_call>
+
+        instead of OpenAI-compatible structured tool_calls.
+        """
+
+        if not content:
+            return content, []
+
+        pattern = re.compile(
+            r"<tool_call>\s*(.*?)\s*</tool_call>",
+            re.DOTALL,
+        )
+
+        matches = pattern.findall(content)
+
+        if not matches:
+            return content, []
+
+        tool_calls: list[ToolCallRequest] = []
+
+        for index, raw_call in enumerate(matches, start=1):
+            try:
+                payload = json.loads(raw_call)
+            except json.JSONDecodeError:
+                continue
+
+            name = payload.get("name")
+
+            arguments = payload.get(
+                "arguments",
+                {},
+            )
+
+            if not isinstance(name, str):
+                continue
+
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError:
+                    continue
+
+            if not isinstance(arguments, dict):
+                continue
+
+            tool_calls.append(
+                ToolCallRequest(
+                    id=f"qair_text_call_{index}",
+                    name=name,
+                    arguments=arguments,
+                )
+            )
+
+        if not tool_calls:
+            return content, []
+
+        cleaned_content = pattern.sub("", content).strip()
+
+        return (
+            cleaned_content or None,
+            tool_calls,
+        )
+
+    def _normalize_messages(
+        self,
+        messages: list[dict],
+    ) -> list[dict]:
+        """
+        Convert QAIR conversation messages into the format expected
+        by llama.cpp's OpenAI-compatible chat completion API.
+
+        QAIR stores tool calls in a provider-neutral representation:
+
+            {
+                "id": "...",
+                "name": "...",
+                "arguments": {...},
+            }
+
+        llama.cpp expects OpenAI-compatible function call objects.
+        """
+
+        normalized: list[dict] = []
+
+        for message in messages:
+            item = dict(message)
+
+            tool_calls = item.get("tool_calls")
+
+            if tool_calls:
+                normalized_calls = []
+
+                for tool_call in tool_calls:
+                    arguments = tool_call.get("arguments", {})
+
+                    if not isinstance(arguments, str):
+                        arguments = json.dumps(arguments)
+
+                    normalized_calls.append(
+                        {
+                            "id": tool_call["id"],
+                            "type": "function",
+                            "function": {
+                                "name": tool_call["name"],
+                                "arguments": arguments,
+                            },
+                        }
+                    )
+
+                item["tool_calls"] = normalized_calls
+
+            normalized.append(item)
+
+        return normalized
+
     def generate(
         self,
         messages: list[dict],
@@ -108,7 +237,7 @@ class LlamaCppBackend(InferenceBackend):
         assert self._model is not None
 
         request = {
-            "messages": messages,
+            "messages": self._normalize_messages(messages),
             "max_tokens": max_tokens,
             "temperature": temperature,
             "top_p": top_p,
@@ -125,24 +254,36 @@ class LlamaCppBackend(InferenceBackend):
 
         raw_tool_calls = message.get("tool_calls") or []
 
-        tool_calls = []
+        tool_calls: list[ToolCallRequest] = []
 
         for raw_tool_call in raw_tool_calls:
+
             function = raw_tool_call["function"]
 
             arguments = function.get("arguments", {})
 
             if isinstance(arguments, str):
-                import json
 
                 arguments = json.loads(arguments)
 
             tool_calls.append(
+
                 ToolCallRequest(
+
                     id=raw_tool_call["id"],
+
                     name=function["name"],
+
                     arguments=arguments,
+
                 )
+
+            )
+
+        if not tool_calls:
+
+            content, tool_calls = self._parse_text_tool_calls(
+                content
             )
 
         return InferenceResponse(
