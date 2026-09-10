@@ -181,6 +181,7 @@ def test_engine_generate_uses_settings_defaults(
 
     backend.generate.assert_called_once_with(
         messages,
+        tools=None,
         max_tokens=engine.settings.max_tokens,
         temperature=engine.settings.temperature,
         top_p=engine.settings.top_p,
@@ -207,6 +208,7 @@ def test_engine_generate_accepts_overrides(
 
     backend.generate.assert_called_once_with(
         messages,
+        tools=None,
         max_tokens=128,
         temperature=0.2,
         top_p=0.8,
@@ -229,6 +231,7 @@ def test_engine_generate_loads_model_lazily(
     backend.load.assert_called_once_with(model)
     backend.generate.assert_called_once_with(
         messages,
+        tools=None,
         max_tokens=engine.settings.max_tokens,
         temperature=engine.settings.temperature,
         top_p=engine.settings.top_p,

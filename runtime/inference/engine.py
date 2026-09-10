@@ -134,6 +134,7 @@ class InferenceEngine:
         self,
         messages: list[dict],
         *,
+        tools: list[dict] | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
         top_p: float | None = None,
@@ -158,6 +159,7 @@ class InferenceEngine:
 
         return self.backend.generate(
             messages,
+            tools=tools,
             max_tokens=actual_max_tokens,
             temperature=actual_temperature,
             top_p=actual_top_p,

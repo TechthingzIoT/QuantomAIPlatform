@@ -73,6 +73,7 @@ class InferenceBackend(ABC):
         self,
         messages: list[dict],
         *,
+        tools: list[dict] | None = None,
         max_tokens: int,
         temperature: float,
         top_p: float,

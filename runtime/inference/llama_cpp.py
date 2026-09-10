@@ -94,6 +94,7 @@ class LlamaCppBackend(InferenceBackend):
         self,
         messages: list[dict],
         *,
+        tools: list[dict] | None = None,
         max_tokens: int,
         temperature: float,
         top_p: float,
@@ -106,12 +107,17 @@ class LlamaCppBackend(InferenceBackend):
 
         assert self._model is not None
 
-        response = self._model.create_chat_completion(
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
-        )
+        request = {
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+        }
+
+        if tools:
+            request["tools"] = tools
+
+        response = self._model.create_chat_completion(**request)
 
         message = response["choices"][0]["message"]
 
