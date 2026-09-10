@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from runtime.chat.message import ChatMessage
 
@@ -70,12 +71,12 @@ class ConversationHistory:
     # Serialization
     # ==================================================
 
-    def to_dict(self) -> list[dict[str, str]]:
+    def to_dict(self) -> list[dict[str, Any]]:
         """Serialize the conversation to dictionaries."""
 
         return [message.to_dict() for message in self.messages]
 
-    def to_messages(self) -> list[dict[str, str]]:
+    def to_messages(self) -> list[dict[str, Any]]:
         """
         Return messages in the format expected by
         llama.cpp chat completion APIs.
@@ -86,7 +87,7 @@ class ConversationHistory:
     @classmethod
     def from_dict(
         cls,
-        data: list[dict[str, str]],
+        data: list[dict[str, Any]],
     ) -> ConversationHistory:
         """Create conversation history from serialized messages."""
 

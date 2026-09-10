@@ -4,7 +4,11 @@ import pytest
 
 from runtime.agents.agent import Agent
 from runtime.chat.message import ChatMessage, MessageRole
-from runtime.inference.response import InferenceResponse
+from runtime.inference.response import (
+    InferenceResponse,
+    ToolCallRequest,
+)
+from runtime.tools.registry import ToolRegistry
 
 
 @pytest.fixture
@@ -256,4 +260,333 @@ def test_agent_integrates_with_real_runtime():
         max_tokens=None,
         temperature=None,
         top_p=None,
+    )
+
+
+# ============================================================
+# Tool Orchestration
+# ============================================================
+
+
+class EchoTool:
+    @property
+    def name(self):
+        return "echo"
+
+    @property
+    def description(self):
+        return "Echo the supplied text."
+
+    @property
+    def input_schema(self):
+        return {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                },
+            },
+            "required": ["text"],
+        }
+
+    def execute(self, arguments):
+        return arguments["text"]
+
+
+class AddTool:
+    @property
+    def name(self):
+        return "add"
+
+    @property
+    def description(self):
+        return "Add two integers."
+
+    @property
+    def input_schema(self):
+        return {
+            "type": "object",
+            "properties": {
+                "a": {
+                    "type": "integer",
+                },
+                "b": {
+                    "type": "integer",
+                },
+            },
+            "required": ["a", "b"],
+        }
+
+    def execute(self, arguments):
+        return arguments["a"] + arguments["b"]
+
+
+def test_run_executes_tool_and_returns_final_response():
+    runtime = MagicMock()
+
+    runtime.generate.side_effect = [
+        InferenceResponse(
+            content=None,
+            tool_calls=[
+                ToolCallRequest(
+                    id="call_1",
+                    name="echo",
+                    arguments={"text": "Hello tool"},
+                ),
+            ],
+        ),
+        InferenceResponse(
+            content="The tool returned Hello tool.",
+        ),
+    ]
+
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+
+    agent = Agent(
+        runtime=runtime,
+        tool_registry=registry,
+    )
+
+    result = agent.run("Use the echo tool.")
+
+    assert result == "The tool returned Hello tool."
+    assert runtime.generate.call_count == 2
+
+    messages = agent.history.to_messages()
+
+    assert messages[0] == {
+        "role": "user",
+        "content": "Use the echo tool.",
+    }
+
+    assert messages[1] == {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "name": "echo",
+                "arguments": {
+                    "text": "Hello tool",
+                },
+            },
+        ],
+    }
+
+    assert messages[2] == {
+        "role": "tool",
+        "content": "Hello tool",
+        "tool_call_id": "call_1",
+    }
+
+    assert messages[3] == {
+        "role": "assistant",
+        "content": "The tool returned Hello tool.",
+    }
+
+
+def test_run_passes_tool_history_to_next_inference():
+    runtime = MagicMock()
+
+    runtime.generate.side_effect = [
+        InferenceResponse(
+            tool_calls=[
+                ToolCallRequest(
+                    id="call_1",
+                    name="echo",
+                    arguments={"text": "QAIR"},
+                ),
+            ],
+        ),
+        InferenceResponse(
+            content="Done.",
+        ),
+    ]
+
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+
+    agent = Agent(
+        runtime=runtime,
+        tool_registry=registry,
+    )
+
+    agent.run("Run the tool.")
+
+    second_call_messages = runtime.generate.call_args_list[1].args[0]
+
+    assert second_call_messages == [
+        {
+            "role": "user",
+            "content": "Run the tool.",
+        },
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call_1",
+                    "name": "echo",
+                    "arguments": {
+                        "text": "QAIR",
+                    },
+                },
+            ],
+        },
+        {
+            "role": "tool",
+            "content": "QAIR",
+            "tool_call_id": "call_1",
+        },
+    ]
+
+
+def test_run_executes_multiple_tool_calls():
+    runtime = MagicMock()
+
+    runtime.generate.side_effect = [
+        InferenceResponse(
+            tool_calls=[
+                ToolCallRequest(
+                    id="call_1",
+                    name="add",
+                    arguments={"a": 2, "b": 3},
+                ),
+                ToolCallRequest(
+                    id="call_2",
+                    name="add",
+                    arguments={"a": 10, "b": 5},
+                ),
+            ],
+        ),
+        InferenceResponse(
+            content="The calculations are complete.",
+        ),
+    ]
+
+    registry = ToolRegistry()
+    registry.register(AddTool())
+
+    agent = Agent(
+        runtime=runtime,
+        tool_registry=registry,
+    )
+
+    result = agent.run("Calculate the values.")
+
+    assert result == "The calculations are complete."
+
+    messages = agent.history.to_messages()
+
+    assert messages[2] == {
+        "role": "tool",
+        "content": "5",
+        "tool_call_id": "call_1",
+    }
+
+    assert messages[3] == {
+        "role": "tool",
+        "content": "15",
+        "tool_call_id": "call_2",
+    }
+
+
+def test_run_rejects_unknown_tool():
+    runtime = MagicMock()
+
+    runtime.generate.return_value = InferenceResponse(
+        tool_calls=[
+            ToolCallRequest(
+                id="call_1",
+                name="unknown",
+                arguments={},
+            ),
+        ],
+    )
+
+    agent = Agent(runtime=runtime)
+
+    with pytest.raises(
+        ValueError,
+        match="Unknown tool: unknown",
+    ):
+        agent.run("Use an unknown tool.")
+
+
+def test_run_rejects_invalid_tool_arguments():
+    runtime = MagicMock()
+
+    runtime.generate.return_value = InferenceResponse(
+        tool_calls=[
+            ToolCallRequest(
+                id="call_1",
+                name="echo",
+                arguments={},
+            ),
+        ],
+    )
+
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+
+    agent = Agent(
+        runtime=runtime,
+        tool_registry=registry,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Missing required argument: text",
+    ):
+        agent.run("Use the echo tool.")
+
+
+def test_run_rejects_response_without_content_or_tool_calls():
+    runtime = MagicMock()
+
+    runtime.generate.return_value = InferenceResponse()
+
+    agent = Agent(runtime=runtime)
+
+    with pytest.raises(
+        RuntimeError,
+        match="Inference response did not contain assistant "
+        "content or tool calls",
+    ):
+        agent.run("Do something.")
+
+
+def test_run_stops_infinite_tool_loop():
+    runtime = MagicMock()
+
+    tool_response = InferenceResponse(
+        tool_calls=[
+            ToolCallRequest(
+                id="call_loop",
+                name="echo",
+                arguments={"text": "loop"},
+            ),
+        ],
+    )
+
+    runtime.generate.return_value = tool_response
+
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+
+    agent = Agent(
+        runtime=runtime,
+        tool_registry=registry,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Maximum tool execution iterations exceeded",
+    ):
+        agent.run("Loop forever.")
+
+    assert (
+        runtime.generate.call_count
+        == Agent.MAX_TOOL_ITERATIONS
     )

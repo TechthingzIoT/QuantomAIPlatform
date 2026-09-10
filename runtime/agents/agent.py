@@ -14,6 +14,7 @@ from __future__ import annotations
 from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
+from runtime.inference.response import ToolCallRequest
 from runtime.tools.protocol import parse_tool_call
 from runtime.tools.registry import ToolRegistry
 from runtime.tools.validation import validate_tool_arguments
@@ -23,6 +24,8 @@ class Agent:
     """Deterministic QAIR agent orchestrator."""
 
     DEFAULT_NAME = "qair-agent"
+
+    MAX_TOOL_ITERATIONS = 8
 
     def __init__(
         self,
@@ -136,13 +139,109 @@ class Agent:
 
         return tool.execute(tool_call.arguments)
 
+    def _record_tool_calls(
+        self,
+        tool_calls: list[ToolCallRequest],
+    ) -> None:
+        """Record assistant-requested tool calls in conversation history."""
+
+        assistant_message = ChatMessage(
+            role=MessageRole.ASSISTANT,
+            content=None,
+            tool_calls=tool_calls,
+        )
+
+        self.history.add(assistant_message)
+
+    def _execute_tool_call(
+        self,
+        tool_call: ToolCallRequest,
+    ) -> object:
+        """Execute a structured inference tool request."""
+
+        payload = {
+            "name": tool_call.name,
+            "arguments": tool_call.arguments,
+        }
+
+        return self.execute_tool(payload)
+
+    def _record_tool_result(
+        self,
+        tool_call: ToolCallRequest,
+        result: object,
+    ) -> None:
+        """Record a tool execution result in conversation history."""
+
+        tool_message = ChatMessage(
+            role=MessageRole.TOOL,
+            content=str(result),
+            tool_call_id=tool_call.id,
+        )
+
+        self.history.add(tool_message)
+
     def run(self, prompt: str) -> str:
         """
-        Execute a user task.
+        Execute a user task with bounded tool orchestration.
 
-        M13 initially uses a single-step execution model. The
-        public boundary is intentionally separated from ``step()``
-        so future multi-step planning and tool execution can be
-        introduced without changing callers.
+        The agent performs inference and executes requested tools
+        until the model returns assistant content without additional
+        tool calls.
+
+        A bounded iteration limit prevents infinite tool loops.
         """
-        return self.step(prompt)
+
+        if not isinstance(prompt, str):
+            raise TypeError("prompt must be a string.")
+
+        if not prompt.strip():
+            raise ValueError("prompt cannot be empty.")
+
+        if not self.running:
+            self.start()
+
+        user_message = ChatMessage(
+            role=MessageRole.USER,
+            content=prompt,
+        )
+
+        self.history.add(user_message)
+
+        for _ in range(self.MAX_TOOL_ITERATIONS):
+            messages = self.history.to_messages()
+
+            response = self.runtime.generate(
+                messages,
+                use_knowledge=True,
+            )
+
+            if response.tool_calls:
+                self._record_tool_calls(response.tool_calls)
+
+                for tool_call in response.tool_calls:
+                    result = self._execute_tool_call(tool_call)
+                    self._record_tool_result(tool_call, result)
+
+                continue
+
+            content = response.content
+
+            if content is None:
+                raise RuntimeError(
+                    "Inference response did not contain assistant "
+                    "content or tool calls."
+                )
+
+            assistant_message = ChatMessage(
+                role=MessageRole.ASSISTANT,
+                content=content,
+            )
+
+            self.history.add(assistant_message)
+
+            return content
+
+        raise RuntimeError(
+            "Maximum tool execution iterations exceeded."
+        )
