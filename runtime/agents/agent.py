@@ -17,6 +17,7 @@ from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
 from runtime.inference.response import ToolCallRequest
+from runtime.tools.context import ToolExecutionContext
 from runtime.tools.executor import ToolExecutor
 from runtime.tools.registry import ToolRegistry
 from runtime.tools.result import ToolExecutionResult
@@ -179,6 +180,8 @@ class Agent:
     def _execute_tool_call(
         self,
         tool_call: ToolCallRequest,
+        *,
+        iteration: int,
     ) -> ToolExecutionResult:
         """Execute an inference-requested tool safely."""
 
@@ -189,7 +192,18 @@ class Agent:
             arguments=tool_call.arguments,
         )
 
-        return self.tool_executor.execute(execution_call)
+        context = ToolExecutionContext(
+            tool_call_id=tool_call.id,
+            agent_name=self.name,
+            metadata={
+                "iteration": iteration,
+            },
+        )
+
+        return self.tool_executor.execute(
+            execution_call,
+            context=context,
+        )
 
     def _record_tool_result(
         self,
@@ -241,7 +255,7 @@ class Agent:
 
         self.history.add(user_message)
 
-        for _ in range(self.MAX_TOOL_ITERATIONS):
+        for iteration in range(self.MAX_TOOL_ITERATIONS):
             messages = self.history.to_messages()
             tools = self.tool_registry.definitions() or None
 
@@ -255,7 +269,10 @@ class Agent:
                 self._record_tool_calls(response.tool_calls)
 
                 for tool_call in response.tool_calls:
-                    execution = self._execute_tool_call(tool_call)
+                    execution = self._execute_tool_call(
+                        tool_call,
+                        iteration=iteration,
+                    )
                     self._record_tool_result(
                         tool_call,
                         execution.to_dict(),
