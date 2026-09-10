@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 
 from runtime.tools.context import ToolExecutionContext
+from runtime.tools.event import ToolExecutionEvent
+from runtime.tools.outcome import ToolExecutionOutcome
 from runtime.tools.protocol import ToolCall
 from runtime.tools.registry import ToolRegistry
 from runtime.tools.result import ToolExecutionResult
@@ -10,6 +12,7 @@ from runtime.tools.validation import validate_tool_arguments
 
 
 class ToolExecutor:
+
     """Execute registered QAIR tools safely."""
 
     def __init__(self, registry: ToolRegistry) -> None:
@@ -21,11 +24,28 @@ class ToolExecutor:
         *,
         context: ToolExecutionContext | None = None,
     ) -> ToolExecutionResult:
-        """Execute a validated tool call and return a structured result."""
+        """Execute a tool and return its structured result."""
+
+        return self.execute_with_outcome(
+            tool_call,
+            context=context,
+        ).result
+
+    def execute_with_outcome(
+        self,
+        tool_call: ToolCall,
+        *,
+        context: ToolExecutionContext | None = None,
+    ) -> ToolExecutionOutcome:
+        """
+        Execute a tool and return both its result and
+        operational execution event.
+        """
 
         started_at = time.perf_counter()
 
         try:
+
             tool = self.registry.get(tool_call.name)
 
             if tool is None:
@@ -38,27 +58,76 @@ class ToolExecutor:
                 tool_call.arguments,
             )
 
-            if context is not None and getattr(
-                tool,
-                "supports_context",
-                False,
+            if (
+                context is not None
+                and getattr(
+                    tool,
+                    "supports_context",
+                    False,
+                )
             ):
+
                 result = tool.execute(
                     tool_call.arguments,
                     context=context,
                 )
-            else:
-                result = tool.execute(tool_call.arguments)
 
-            return ToolExecutionResult.success(result)
+            else:
+
+                result = tool.execute(
+                    tool_call.arguments
+                )
+
+            execution_result = ToolExecutionResult.success(
+                result
+            )
 
         except Exception as exc:
-            return ToolExecutionResult.failure(exc)
 
-        finally:
-            elapsed_ms = (
-                time.perf_counter() - started_at
-            ) * 1000
+            execution_result = ToolExecutionResult.failure(
+                exc
+            )
 
-            # Reserved for future execution telemetry.
-            _ = elapsed_ms
+        elapsed_ms = (
+            time.perf_counter() - started_at
+        ) * 1000
+
+        metadata = (
+            context.metadata
+            if context is not None
+            else {}
+        )
+
+        event = ToolExecutionEvent(
+
+            tool_name=tool_call.name,
+
+            elapsed_ms=elapsed_ms,
+
+            ok=execution_result.ok,
+
+            tool_call_id=(
+                context.tool_call_id
+                if context is not None
+                else None
+            ),
+
+            agent_name=(
+                context.agent_name
+                if context is not None
+                else None
+            ),
+
+            iteration=metadata.get(
+                "iteration"
+            ),
+
+            error_type=execution_result.error_type,
+
+            error_message=execution_result.error_message,
+        )
+
+        return ToolExecutionOutcome(
+            result=execution_result,
+            event=event,
+        )
