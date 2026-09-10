@@ -17,9 +17,9 @@ from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
 from runtime.inference.response import ToolCallRequest
-from runtime.tools.protocol import parse_tool_call
+from runtime.tools.executor import ToolExecutor
 from runtime.tools.registry import ToolRegistry
-from runtime.tools.validation import validate_tool_arguments
+from runtime.tools.result import ToolExecutionResult
 
 
 class Agent:
@@ -50,6 +50,7 @@ class Agent:
         self.tool_registry = (
             tool_registry if tool_registry is not None else ToolRegistry()
         )
+        self.tool_executor = ToolExecutor(self.tool_registry)
         self.running = False
 
     # ==================================================
@@ -128,18 +129,38 @@ class Agent:
         return content
 
     def execute_tool(self, payload: object) -> object:
-        """Parse, validate, and execute a registered tool call."""
+        """Execute a tool and return its raw result.
+
+        Raises the underlying execution error when the tool fails.
+        """
+
+        from runtime.tools.protocol import parse_tool_call
 
         tool_call = parse_tool_call(payload)
+        execution = self.tool_executor.execute(tool_call)
 
-        tool = self.tool_registry.get(tool_call.name)
+        if not execution.ok:
+            error_type = execution.error_type or "RuntimeError"
+            error_message = (
+                execution.error_message
+                or "Tool execution failed."
+            )
 
-        if tool is None:
-            raise ValueError(f"Unknown tool: {tool_call.name}")
+            error_classes = {
+                "ValueError": ValueError,
+                "TypeError": TypeError,
+                "KeyError": KeyError,
+                "RuntimeError": RuntimeError,
+            }
 
-        validate_tool_arguments(tool, tool_call.arguments)
+            error_class = error_classes.get(
+                error_type,
+                RuntimeError,
+            )
 
-        return tool.execute(tool_call.arguments)
+            raise error_class(error_message)
+
+        return execution.result
 
     def _record_tool_calls(
         self,
@@ -158,15 +179,17 @@ class Agent:
     def _execute_tool_call(
         self,
         tool_call: ToolCallRequest,
-    ) -> object:
-        """Execute a structured inference tool request."""
+    ) -> ToolExecutionResult:
+        """Execute an inference-requested tool safely."""
 
-        payload = {
-            "name": tool_call.name,
-            "arguments": tool_call.arguments,
-        }
+        from runtime.tools.protocol import ToolCall
 
-        return self.execute_tool(payload)
+        execution_call = ToolCall(
+            name=tool_call.name,
+            arguments=tool_call.arguments,
+        )
+
+        return self.tool_executor.execute(execution_call)
 
     def _record_tool_result(
         self,
@@ -232,8 +255,11 @@ class Agent:
                 self._record_tool_calls(response.tool_calls)
 
                 for tool_call in response.tool_calls:
-                    result = self._execute_tool_call(tool_call)
-                    self._record_tool_result(tool_call, result)
+                    execution = self._execute_tool_call(tool_call)
+                    self._record_tool_result(
+                        tool_call,
+                        execution.to_dict(),
+                    )
 
                 continue
 

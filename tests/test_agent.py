@@ -434,7 +434,7 @@ def test_run_executes_tool_and_returns_final_response():
 
     assert messages[2] == {
         "role": "tool",
-        "content": "Hello tool",
+        "content": '{"ok": true, "result": "Hello tool"}',
         "tool_call_id": "call_1",
     }
 
@@ -494,7 +494,7 @@ def test_run_passes_tool_history_to_next_inference():
         },
         {
             "role": "tool",
-            "content": "QAIR",
+            "content": '{"ok": true, "result": "QAIR"}',
             "tool_call_id": "call_1",
         },
     ]
@@ -539,51 +539,71 @@ def test_run_executes_multiple_tool_calls():
 
     assert messages[2] == {
         "role": "tool",
-        "content": "5",
+        "content": '{"ok": true, "result": 5}',
         "tool_call_id": "call_1",
     }
 
     assert messages[3] == {
         "role": "tool",
-        "content": "15",
+        "content": '{"ok": true, "result": 15}',
         "tool_call_id": "call_2",
     }
 
 
-def test_run_rejects_unknown_tool():
+def test_run_handles_unknown_tool_and_returns_structured_error():
     runtime = MagicMock()
 
-    runtime.generate.return_value = InferenceResponse(
-        tool_calls=[
-            ToolCallRequest(
-                id="call_1",
-                name="unknown",
-                arguments={},
-            ),
-        ],
-    )
+    runtime.generate.side_effect = [
+        InferenceResponse(
+            tool_calls=[
+                ToolCallRequest(
+                    id="call_1",
+                    name="unknown",
+                    arguments={},
+                ),
+            ],
+        ),
+        InferenceResponse(
+            content="The requested tool is not available.",
+        ),
+    ]
 
     agent = Agent(runtime=runtime)
 
-    with pytest.raises(
-        ValueError,
-        match="Unknown tool: unknown",
-    ):
-        agent.run("Use an unknown tool.")
+    result = agent.run("Use an unknown tool.")
+
+    assert result == "The requested tool is not available."
+
+    second_call_messages = runtime.generate.call_args_list[1].args[0]
+
+    assert second_call_messages[2] == {
+        "role": "tool",
+        "content": (
+            '{"ok": false, "error": '
+            '{"type": "ValueError", '
+            '"message": "Unknown tool: unknown"}}'
+        ),
+        "tool_call_id": "call_1",
+    }
 
 
-def test_run_rejects_invalid_tool_arguments():
+def test_run_handles_invalid_tool_arguments_and_returns_structured_error():
     runtime = MagicMock()
 
-    runtime.generate.return_value = InferenceResponse(
-        tool_calls=[
-            ToolCallRequest(
-                id="call_1",
-                name="echo",
-                arguments={},
-            ),
-        ],
-    )
+    runtime.generate.side_effect = [
+        InferenceResponse(
+            tool_calls=[
+                ToolCallRequest(
+                    id="call_1",
+                    name="echo",
+                    arguments={},
+                ),
+            ],
+        ),
+        InferenceResponse(
+            content="The tool call was missing required arguments.",
+        ),
+    ]
 
     registry = ToolRegistry()
     registry.register(EchoTool())
@@ -593,11 +613,21 @@ def test_run_rejects_invalid_tool_arguments():
         tool_registry=registry,
     )
 
-    with pytest.raises(
-        ValueError,
-        match="Missing required argument: text",
-    ):
-        agent.run("Use the echo tool.")
+    result = agent.run("Use the echo tool.")
+
+    assert result == "The tool call was missing required arguments."
+
+    second_call_messages = runtime.generate.call_args_list[1].args[0]
+
+    assert second_call_messages[2] == {
+        "role": "tool",
+        "content": (
+            '{"ok": false, "error": '
+            '{"type": "ValueError", '
+            '"message": "Missing required argument: text"}}'
+        ),
+        "tool_call_id": "call_1",
+    }
 
 
 def test_run_rejects_response_without_content_or_tool_calls():

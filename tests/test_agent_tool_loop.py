@@ -128,8 +128,8 @@ def test_agent_run_executes_tool_and_returns_final_answer():
     assert second_messages[2] == {
         "role": "tool",
         "content": (
-            '{"status": "operational", '
-            '"temperature": 24.5}'
+            '{"ok": true, "result": {"status": "operational", '
+            '"temperature": 24.5}}'
         ),
         "tool_call_id": "call_1",
     }
