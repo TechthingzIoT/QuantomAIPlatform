@@ -117,6 +117,78 @@ def test_backend_generate(backend, model):
     )
 
 
+
+
+def test_backend_generate_returns_structured_tool_calls(
+    backend,
+    model,
+):
+
+    llama = MagicMock()
+
+    llama.create_chat_completion.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "function": {
+                                "name": "echo",
+                                "arguments": (
+                                    '{"text": "Hello QAIR"}'
+                                ),
+                            },
+                        },
+                    ],
+                }
+            }
+        ]
+    }
+
+    messages = [
+        {
+            "role": "user",
+            "content": "Use the echo tool.",
+        }
+    ]
+
+    with patch(
+        "runtime.inference.llama_cpp.Llama",
+        return_value=llama,
+    ):
+        backend.load(model)
+
+        result = backend.generate(
+            messages,
+            max_tokens=128,
+            temperature=0.2,
+            top_p=0.8,
+        )
+
+    assert result.content is None
+
+    assert len(result.tool_calls) == 1
+
+    tool_call = result.tool_calls[0]
+
+    assert tool_call.id == "call_1"
+
+    assert tool_call.name == "echo"
+
+    assert tool_call.arguments == {
+        "text": "Hello QAIR",
+    }
+
+    llama.create_chat_completion.assert_called_once_with(
+        messages=messages,
+        max_tokens=128,
+        temperature=0.2,
+        top_p=0.8,
+    )
+
+
 def test_backend_generate_requires_loaded_model(backend):
     with pytest.raises(RuntimeError, match="No model is loaded"):
         backend.generate(

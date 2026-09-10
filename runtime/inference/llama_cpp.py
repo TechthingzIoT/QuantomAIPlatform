@@ -17,7 +17,10 @@ from llama_cpp import Llama
 
 from runtime.config.settings import QAIRSettings, settings
 from runtime.inference.backend import InferenceBackend
-from runtime.inference.response import InferenceResponse
+from runtime.inference.response import (
+    InferenceResponse,
+    ToolCallRequest,
+)
 from runtime.models.model import Model
 
 
@@ -110,8 +113,33 @@ class LlamaCppBackend(InferenceBackend):
             top_p=top_p,
         )
 
-        content = response["choices"][0]["message"]["content"]
+        message = response["choices"][0]["message"]
+
+        content = message.get("content")
+
+        raw_tool_calls = message.get("tool_calls") or []
+
+        tool_calls = []
+
+        for raw_tool_call in raw_tool_calls:
+            function = raw_tool_call["function"]
+
+            arguments = function.get("arguments", {})
+
+            if isinstance(arguments, str):
+                import json
+
+                arguments = json.loads(arguments)
+
+            tool_calls.append(
+                ToolCallRequest(
+                    id=raw_tool_call["id"],
+                    name=function["name"],
+                    arguments=arguments,
+                )
+            )
 
         return InferenceResponse(
             content=content.strip() if content else None,
+            tool_calls=tool_calls,
         )
