@@ -17,10 +17,13 @@ from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
 from runtime.inference.response import ToolCallRequest
+from runtime.agents.outcome import AgentRunOutcome
 from runtime.tools.context import ToolExecutionContext
 from runtime.tools.executor import ToolExecutor
+from runtime.tools.outcome import ToolExecutionOutcome
 from runtime.tools.registry import ToolRegistry
 from runtime.tools.result import ToolExecutionResult
+from runtime.tools.telemetry import ToolExecutionTelemetry
 
 
 class Agent:
@@ -37,6 +40,7 @@ class Agent:
         history: ConversationHistory | None = None,
         name: str = DEFAULT_NAME,
         tool_registry: ToolRegistry | None = None,
+        telemetry: ToolExecutionTelemetry | None = None,
     ) -> None:
         if not isinstance(name, str):
             raise TypeError("name must be a string.")
@@ -52,6 +56,11 @@ class Agent:
             tool_registry if tool_registry is not None else ToolRegistry()
         )
         self.tool_executor = ToolExecutor(self.tool_registry)
+        self.telemetry = (
+            telemetry
+            if telemetry is not None
+            else ToolExecutionTelemetry()
+        )
         self.running = False
 
     # ==================================================
@@ -182,8 +191,8 @@ class Agent:
         tool_call: ToolCallRequest,
         *,
         iteration: int,
-    ) -> ToolExecutionResult:
-        """Execute an inference-requested tool safely."""
+    ) -> ToolExecutionOutcome:
+        """Execute an inference-requested tool with telemetry."""
 
         from runtime.tools.protocol import ToolCall
 
@@ -200,7 +209,7 @@ class Agent:
             },
         )
 
-        return self.tool_executor.execute(
+        return self.tool_executor.execute_with_outcome(
             execution_call,
             context=context,
         )
@@ -229,6 +238,14 @@ class Agent:
         self.history.add(tool_message)
 
     def run(self, prompt: str) -> str:
+        """Execute a user task and return the final content."""
+
+        return self.run_with_outcome(prompt).content
+
+    def run_with_outcome(
+        self,
+        prompt: str,
+    ) -> AgentRunOutcome:
         """
         Execute a user task with bounded tool orchestration.
 
@@ -255,6 +272,8 @@ class Agent:
 
         self.history.add(user_message)
 
+        tool_events = []
+
         for iteration in range(self.MAX_TOOL_ITERATIONS):
             messages = self.history.to_messages()
             tools = self.tool_registry.definitions() or None
@@ -273,9 +292,13 @@ class Agent:
                         tool_call,
                         iteration=iteration,
                     )
+
+                    tool_events.append(execution.event)
+                    self.telemetry.record(execution.event)
+
                     self._record_tool_result(
                         tool_call,
-                        execution.to_dict(),
+                        execution.result.to_dict(),
                     )
 
                 continue
@@ -295,7 +318,10 @@ class Agent:
 
             self.history.add(assistant_message)
 
-            return content
+            return AgentRunOutcome(
+                content=content,
+                tool_events=tool_events,
+            )
 
         raise RuntimeError(
             "Maximum tool execution iterations exceeded."
