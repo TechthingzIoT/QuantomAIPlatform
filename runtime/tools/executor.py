@@ -70,6 +70,9 @@ class ToolExecutor:
         """
         started_at = time.perf_counter()
 
+        attempt_count = 0
+        retry_count = 0
+
         try:
             decision = self.policy.evaluate(
                 tool_call,
@@ -97,11 +100,16 @@ class ToolExecutor:
                 tool_call.arguments,
             )
 
-            result = self._execute_with_retries(
+            (
+                result,
+                attempt_count,
+            ) = self._execute_with_retries(
                 tool,
                 tool_call.arguments,
                 context=context,
             )
+
+            retry_count = attempt_count - 1
 
             execution_result = ToolExecutionResult.success(
                 result
@@ -126,6 +134,8 @@ class ToolExecutor:
             tool_name=tool_call.name,
             elapsed_ms=elapsed_ms,
             ok=execution_result.ok,
+            attempt_count=attempt_count,
+            retry_count=retry_count,
             tool_call_id=(
                 context.tool_call_id
                 if context is not None
@@ -168,7 +178,7 @@ class ToolExecutor:
         arguments: dict,
         *,
         context: ToolExecutionContext | None = None,
-    ) -> object:
+    ) -> tuple[object, int]:
         """
         Execute a tool and retry execution failures when the
         tool explicitly supports retries.
@@ -195,11 +205,12 @@ class ToolExecutor:
 
         for attempt in range(attempts):
             try:
-                return self._execute_tool(
+                result = self._execute_tool(
                     tool,
                     arguments,
                     context=context,
                 )
+                return result, attempt + 1
 
             except Exception as exc:
                 last_error = exc

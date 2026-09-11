@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class ToolExecutionEvent:
+
     """Operational information about a tool execution."""
 
     tool_name: str
@@ -12,6 +13,10 @@ class ToolExecutionEvent:
     elapsed_ms: float
 
     ok: bool
+
+    attempt_count: int = 1
+
+    retry_count: int = 0
 
     tool_call_id: str | None = None
 
