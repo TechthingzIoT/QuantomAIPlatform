@@ -281,3 +281,149 @@ def test_executor_returns_timeout_failure():
     assert result.error_type == (
         ToolExecutionTimeoutError.__name__
     )
+
+
+class RetryableFlakyTool:
+    name = "retryable_flaky"
+
+    description = "Fails once before succeeding."
+
+    input_schema: ClassVar[dict] = {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+
+    def __init__(self):
+        self.calls = 0
+
+    @property
+    def supports_retry(self):
+        return True
+
+    def execute(self, arguments):
+        self.calls += 1
+
+        if self.calls == 1:
+            raise RuntimeError("Temporary failure")
+
+        return "recovered"
+
+
+def test_executor_retries_retryable_tool():
+    registry = ToolRegistry()
+
+    tool = RetryableFlakyTool()
+    registry.register(tool)
+
+    executor = ToolExecutor(
+        registry,
+        config=ToolExecutionConfig(
+            max_retries=1,
+        ),
+    )
+
+    result = executor.execute(
+        ToolCall(
+            name="retryable_flaky",
+            arguments={},
+        )
+    )
+
+    assert result.ok is True
+    assert result.result == "recovered"
+    assert tool.calls == 2
+
+
+class NonRetryableFlakyTool:
+    name = "non_retryable_flaky"
+
+    description = "Fails and must not be retried."
+
+    input_schema: ClassVar[dict] = {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+
+    def __init__(self):
+        self.calls = 0
+
+    def execute(self, arguments):
+        self.calls += 1
+        raise RuntimeError("Failure")
+
+
+def test_executor_does_not_retry_non_retryable_tool():
+    registry = ToolRegistry()
+
+    tool = NonRetryableFlakyTool()
+    registry.register(tool)
+
+    executor = ToolExecutor(
+        registry,
+        config=ToolExecutionConfig(
+            max_retries=3,
+        ),
+    )
+
+    result = executor.execute(
+        ToolCall(
+            name="non_retryable_flaky",
+            arguments={},
+        )
+    )
+
+    assert result.ok is False
+    assert result.error_type == "RuntimeError"
+    assert tool.calls == 1
+
+
+class AlwaysFailingRetryableTool:
+    name = "always_failing_retryable"
+
+    description = "Always fails."
+
+    input_schema: ClassVar[dict] = {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+
+    def __init__(self):
+        self.calls = 0
+
+    @property
+    def supports_retry(self):
+        return True
+
+    def execute(self, arguments):
+        self.calls += 1
+        raise RuntimeError("Still failing")
+
+
+def test_executor_stops_after_max_retries():
+    registry = ToolRegistry()
+
+    tool = AlwaysFailingRetryableTool()
+    registry.register(tool)
+
+    executor = ToolExecutor(
+        registry,
+        config=ToolExecutionConfig(
+            max_retries=2,
+        ),
+    )
+
+    result = executor.execute(
+        ToolCall(
+            name="always_failing_retryable",
+            arguments={},
+        )
+    )
+
+    assert result.ok is False
+    assert result.error_type == "RuntimeError"
+
+    # Initial attempt + 2 retries.
+    assert tool.calls == 3

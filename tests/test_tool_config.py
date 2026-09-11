@@ -3,20 +3,27 @@ import pytest
 from runtime.tools.config import ToolExecutionConfig
 
 
-def test_config_defaults_to_no_timeout():
-
+def test_config_defaults_to_no_timeout_and_no_retries():
     config = ToolExecutionConfig()
 
     assert config.timeout_seconds is None
+    assert config.max_retries == 0
 
 
 def test_config_accepts_positive_timeout():
-
     config = ToolExecutionConfig(
         timeout_seconds=30.0,
     )
 
     assert config.timeout_seconds == 30.0
+
+
+def test_config_accepts_positive_retry_count():
+    config = ToolExecutionConfig(
+        max_retries=2,
+    )
+
+    assert config.max_retries == 2
 
 
 @pytest.mark.parametrize(
@@ -30,11 +37,31 @@ def test_config_accepts_positive_timeout():
 def test_config_rejects_non_positive_timeout(
     timeout_seconds,
 ):
-
     with pytest.raises(
         ValueError,
         match="timeout_seconds must be greater than zero.",
     ):
         ToolExecutionConfig(
             timeout_seconds=timeout_seconds,
+        )
+
+
+@pytest.mark.parametrize(
+    "max_retries",
+    [
+        -1,
+        -2,
+    ],
+)
+def test_config_rejects_negative_retry_count(
+    max_retries,
+):
+    with pytest.raises(
+        ValueError,
+        match=(
+            "max_retries must be greater than or equal to zero."
+        ),
+    ):
+        ToolExecutionConfig(
+            max_retries=max_retries,
         )

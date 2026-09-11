@@ -27,7 +27,6 @@ class Tool(ABC):
 
     def to_definition(self) -> dict[str, Any]:
         """Return an OpenAI-compatible function definition."""
-
         return {
             "type": "function",
             "function": {
@@ -40,6 +39,11 @@ class Tool(ABC):
     @property
     def supports_context(self) -> bool:
         """Return whether this tool accepts execution context."""
+        return False
+
+    @property
+    def supports_retry(self) -> bool:
+        """Return whether this tool can be safely retried."""
         return False
 
     @abstractmethod

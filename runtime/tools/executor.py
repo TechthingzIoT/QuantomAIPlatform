@@ -94,7 +94,7 @@ class ToolExecutor:
                 tool_call.arguments,
             )
 
-            result = self._execute_tool(
+            result = self._execute_with_retries(
                 tool,
                 tool_call.arguments,
                 context=context,
@@ -143,6 +143,53 @@ class ToolExecutor:
         return ToolExecutionOutcome(
             result=execution_result,
             event=event,
+        )
+
+    def _execute_with_retries(
+        self,
+        tool: object,
+        arguments: dict,
+        *,
+        context: ToolExecutionContext | None = None,
+    ) -> object:
+        """
+        Execute a tool and retry execution failures when the
+        tool explicitly supports retries.
+        """
+
+        max_retries = self.config.max_retries
+        supports_retry = getattr(
+            tool,
+            "supports_retry",
+            False,
+        )
+
+        attempts = 1
+
+        if supports_retry:
+            attempts += max_retries
+
+        last_error: Exception | None = None
+
+        for attempt in range(attempts):
+            try:
+                return self._execute_tool(
+                    tool,
+                    arguments,
+                    context=context,
+                )
+
+            except Exception as exc:
+                last_error = exc
+
+                if attempt == attempts - 1:
+                    raise
+
+        if last_error is not None:
+            raise last_error
+
+        raise RuntimeError(
+            "Tool execution failed without an error."
         )
 
     def _execute_tool(
