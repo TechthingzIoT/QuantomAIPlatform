@@ -513,3 +513,258 @@ def test_executor_waits_before_retrying():
     assert tool.calls == 2
 
     assert elapsed_seconds >= retry_delay_seconds
+
+
+def test_executor_uses_fixed_retry_strategy():
+
+    registry = ToolRegistry()
+
+    tool = DelayedRetryTool()
+
+    registry.register(tool)
+
+    retry_delay_seconds = 0.05
+
+    executor = ToolExecutor(
+
+        registry,
+
+        config=ToolExecutionConfig(
+
+            max_retries=1,
+
+            retry_delay_seconds=retry_delay_seconds,
+
+            retry_strategy="fixed",
+
+        ),
+
+    )
+
+    started_at = time.perf_counter()
+
+    result = executor.execute(
+
+        ToolCall(
+
+            name="delayed_retry",
+
+            arguments={},
+
+        )
+
+    )
+
+    elapsed_seconds = (
+
+        time.perf_counter() - started_at
+
+    )
+
+    assert result.ok is True
+
+    assert result.result == "success"
+
+    assert tool.calls == 2
+
+    assert elapsed_seconds >= retry_delay_seconds
+
+
+def test_executor_uses_exponential_retry_strategy():
+
+    registry = ToolRegistry()
+
+    tool = DelayedRetryTool()
+
+    registry.register(tool)
+
+    retry_delay_seconds = 0.05
+
+    executor = ToolExecutor(
+
+        registry,
+
+        config=ToolExecutionConfig(
+
+            max_retries=1,
+
+            retry_delay_seconds=retry_delay_seconds,
+
+            retry_strategy="exponential",
+
+        ),
+
+    )
+
+    started_at = time.perf_counter()
+
+    result = executor.execute(
+
+        ToolCall(
+
+            name="delayed_retry",
+
+            arguments={},
+
+        )
+
+    )
+
+    elapsed_seconds = (
+
+        time.perf_counter() - started_at
+
+    )
+
+    assert result.ok is True
+
+    assert result.result == "success"
+
+    assert tool.calls == 2
+
+    assert elapsed_seconds >= retry_delay_seconds
+
+
+
+class MultiRetryTool:
+
+    name = "multi_retry"
+
+    description = "Fails twice before succeeding."
+
+    input_schema: ClassVar[dict] = {
+
+        "type": "object",
+
+        "properties": {},
+
+        "required": [],
+
+    }
+
+    supports_retry = True
+
+    def __init__(self):
+
+        self.calls = 0
+
+    def execute(self, arguments):
+
+        self.calls += 1
+
+        if self.calls < 3:
+
+            raise RuntimeError("Temporary failure")
+
+        return "success"
+
+
+def test_executor_fixed_retry_strategy_uses_fixed_delays():
+
+    registry = ToolRegistry()
+
+    tool = MultiRetryTool()
+
+    registry.register(tool)
+
+    retry_delay_seconds = 0.05
+
+    executor = ToolExecutor(
+
+        registry,
+
+        config=ToolExecutionConfig(
+
+            max_retries=2,
+
+            retry_delay_seconds=retry_delay_seconds,
+
+            retry_strategy="fixed",
+
+        ),
+
+    )
+
+    started_at = time.perf_counter()
+
+    result = executor.execute(
+
+        ToolCall(
+
+            name="multi_retry",
+
+            arguments={},
+
+        )
+
+    )
+
+    elapsed_seconds = (
+
+        time.perf_counter() - started_at
+
+    )
+
+    assert result.ok is True
+
+    assert result.result == "success"
+
+    assert tool.calls == 3
+
+    assert elapsed_seconds >= retry_delay_seconds * 2
+
+
+def test_executor_exponential_retry_strategy_increases_delays():
+
+    registry = ToolRegistry()
+
+    tool = MultiRetryTool()
+
+    registry.register(tool)
+
+    retry_delay_seconds = 0.05
+
+    executor = ToolExecutor(
+
+        registry,
+
+        config=ToolExecutionConfig(
+
+            max_retries=2,
+
+            retry_delay_seconds=retry_delay_seconds,
+
+            retry_strategy="exponential",
+
+        ),
+
+    )
+
+    started_at = time.perf_counter()
+
+    result = executor.execute(
+
+        ToolCall(
+
+            name="multi_retry",
+
+            arguments={},
+
+        )
+
+    )
+
+    elapsed_seconds = (
+
+        time.perf_counter() - started_at
+
+    )
+
+    assert result.ok is True
+
+    assert result.result == "success"
+
+    assert tool.calls == 3
+
+    assert elapsed_seconds >= retry_delay_seconds * 3
+

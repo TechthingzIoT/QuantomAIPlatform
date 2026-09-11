@@ -16,6 +16,11 @@ from runtime.tools.policy import (
 from runtime.tools.protocol import ToolCall
 from runtime.tools.registry import ToolRegistry
 from runtime.tools.result import ToolExecutionResult
+from runtime.tools.retry import (
+    ExponentialRetryStrategy,
+    FixedRetryStrategy,
+    RetryStrategy,
+)
 from runtime.tools.validation import validate_tool_arguments
 
 
@@ -143,6 +148,20 @@ class ToolExecutor:
             event=event,
         )
 
+    def _get_retry_strategy(self) -> RetryStrategy:
+        """Return the configured retry strategy."""
+
+        if self.config.retry_strategy == "fixed":
+            return FixedRetryStrategy()
+
+        if self.config.retry_strategy == "exponential":
+            return ExponentialRetryStrategy()
+
+        raise RuntimeError(
+            "Unsupported retry strategy: "
+            f"{self.config.retry_strategy}"
+        )
+
     def _execute_with_retries(
         self,
         tool: object,
@@ -158,6 +177,8 @@ class ToolExecutor:
         retry_delay_seconds = (
             self.config.retry_delay_seconds
         )
+
+        retry_strategy = self._get_retry_strategy()
 
         supports_retry = getattr(
             tool,
@@ -186,8 +207,15 @@ class ToolExecutor:
                 if attempt == attempts - 1:
                     raise
 
-                if retry_delay_seconds > 0:
-                    time.sleep(retry_delay_seconds)
+                delay_seconds = (
+                    retry_strategy.get_delay_seconds(
+                        attempt,
+                        base_delay_seconds=retry_delay_seconds,
+                    )
+                )
+
+                if delay_seconds > 0:
+                    time.sleep(delay_seconds)
 
         if last_error is not None:
             raise last_error

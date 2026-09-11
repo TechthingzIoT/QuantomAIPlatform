@@ -100,3 +100,82 @@ def test_config_rejects_negative_retry_delay(
         ToolExecutionConfig(
             retry_delay_seconds=retry_delay_seconds,
         )
+
+
+def test_config_defaults_to_fixed_retry_strategy():
+
+    config = ToolExecutionConfig()
+
+    assert config.retry_strategy == "fixed"
+
+
+@pytest.mark.parametrize(
+
+    "retry_strategy",
+
+    [
+
+        "fixed",
+
+        "exponential",
+
+    ],
+
+)
+def test_config_accepts_supported_retry_strategies(
+
+    retry_strategy,
+
+):
+
+    config = ToolExecutionConfig(
+
+        retry_strategy=retry_strategy,
+
+    )
+
+    assert config.retry_strategy == retry_strategy
+
+
+@pytest.mark.parametrize(
+
+    "retry_strategy",
+
+    [
+
+        "linear",
+
+        "random",
+
+        "invalid",
+
+        "",
+
+    ],
+
+)
+def test_config_rejects_unsupported_retry_strategy(
+
+    retry_strategy,
+
+):
+
+    with pytest.raises(
+
+        ValueError,
+
+        match=(
+
+            "retry_strategy must be either "
+
+            "'fixed' or 'exponential'."
+
+        ),
+
+    ):
+
+        ToolExecutionConfig(
+
+            retry_strategy=retry_strategy,
+
+        )
