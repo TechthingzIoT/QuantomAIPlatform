@@ -1,3 +1,4 @@
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 from runtime.agents.agent import Agent
@@ -12,7 +13,7 @@ from runtime.tools.registry import ToolRegistry
 class LabStatusTool:
     name = "get_lab_status"
     description = "Get the current status of the QAIR lab."
-    input_schema = {
+    input_schema: ClassVar[dict] = {
         "type": "object",
         "properties": {},
         "required": [],
@@ -146,7 +147,7 @@ class ContextAwareLabStatusTool:
 
     description = "Return tool execution context."
 
-    input_schema = {
+    input_schema: ClassVar[dict] = {
         "type": "object",
         "properties": {},
         "required": [],

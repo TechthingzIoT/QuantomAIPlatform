@@ -1,3 +1,7 @@
+from dataclasses import FrozenInstanceError
+
+import pytest
+
 from runtime.tools.context import ToolExecutionContext
 
 
@@ -30,11 +34,5 @@ def test_context_is_immutable():
         tool_call_id="call_1",
     )
 
-    try:
+    with pytest.raises(FrozenInstanceError):
         context.tool_call_id = "call_2"
-    except Exception:
-        pass
-    else:
-        raise AssertionError(
-            "ToolExecutionContext should be immutable."
-        )

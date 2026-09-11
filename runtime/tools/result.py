@@ -14,7 +14,7 @@ class ToolExecutionResult:
     error_message: str | None = None
 
     @classmethod
-    def success(cls, result: Any) -> "ToolExecutionResult":
+    def success(cls, result: Any) -> ToolExecutionResult:
         """Create a successful tool execution result."""
 
         return cls(
@@ -26,7 +26,7 @@ class ToolExecutionResult:
     def failure(
         cls,
         error: Exception,
-    ) -> "ToolExecutionResult":
+    ) -> ToolExecutionResult:
         """Create a failed tool execution result."""
 
         return cls(

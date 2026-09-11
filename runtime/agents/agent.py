@@ -13,16 +13,15 @@ from __future__ import annotations
 
 import json
 
+from runtime.agents.outcome import AgentRunOutcome
 from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
 from runtime.inference.response import ToolCallRequest
-from runtime.agents.outcome import AgentRunOutcome
 from runtime.tools.context import ToolExecutionContext
 from runtime.tools.executor import ToolExecutor
 from runtime.tools.outcome import ToolExecutionOutcome
 from runtime.tools.registry import ToolRegistry
-from runtime.tools.result import ToolExecutionResult
 from runtime.tools.telemetry import ToolExecutionTelemetry
 
 

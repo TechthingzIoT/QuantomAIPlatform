@@ -103,7 +103,7 @@ class ToolExecutor:
                 result
             )
 
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             execution_result = ToolExecutionResult.failure(
                 exc
             )

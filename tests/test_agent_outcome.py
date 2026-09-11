@@ -1,3 +1,4 @@
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 from runtime.agents.agent import Agent
@@ -11,7 +12,7 @@ from runtime.tools.registry import ToolRegistry
 class EchoTool:
     name = "echo"
     description = "Echo a message."
-    input_schema = {
+    input_schema: ClassVar[dict] = {
         "type": "object",
         "properties": {
             "message": {

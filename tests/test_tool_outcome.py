@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from runtime.tools.context import ToolExecutionContext
 from runtime.tools.executor import ToolExecutor
 from runtime.tools.protocol import ToolCall
@@ -10,7 +12,7 @@ class EchoTool:
 
     description = "Echo supplied text."
 
-    input_schema = {
+    input_schema: ClassVar[dict] = {
         "type": "object",
         "properties": {
             "text": {
@@ -30,7 +32,7 @@ class BrokenTool:
 
     description = "Always fails."
 
-    input_schema = {
+    input_schema: ClassVar[dict] = {
         "type": "object",
         "properties": {},
     }

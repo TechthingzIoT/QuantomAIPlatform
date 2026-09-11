@@ -1,3 +1,4 @@
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 import pytest
@@ -143,7 +144,7 @@ def test_agent_run_propagates_registered_tools_to_runtime(runtime):
     class LabStatusTool:
         name = "get_lab_status"
         description = "Return the current lab status."
-        input_schema = {
+        input_schema: ClassVar[dict] = {
             "type": "object",
             "properties": {},
         }
