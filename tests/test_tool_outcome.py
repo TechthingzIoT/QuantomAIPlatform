@@ -135,3 +135,56 @@ def test_execution_outcome_records_failure():
     assert outcome.event.error_type == "RuntimeError"
 
     assert outcome.event.error_message == "Tool exploded"
+
+
+def test_executor_denied_by_policy_returns_failure():
+    from runtime.tools.policy import AllowListToolPolicy
+
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+
+    executor = ToolExecutor(
+        registry,
+        policy=AllowListToolPolicy(set()),
+    )
+
+    outcome = executor.execute_with_outcome(
+        ToolCall(
+            name="echo",
+            arguments={
+                "text": "hello",
+            },
+        )
+    )
+
+    assert outcome.result.ok is False
+    assert outcome.result.error_type == "PermissionError"
+
+    assert outcome.event.ok is False
+    assert outcome.event.error_type == "PermissionError"
+
+
+def test_executor_allowed_by_policy_executes_tool():
+    from runtime.tools.policy import AllowListToolPolicy
+
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+
+    executor = ToolExecutor(
+        registry,
+        policy=AllowListToolPolicy({"echo"}),
+    )
+
+    outcome = executor.execute_with_outcome(
+        ToolCall(
+            name="echo",
+            arguments={
+                "text": "hello",
+            },
+        )
+    )
+
+    assert outcome.result.ok is True
+    assert outcome.result.result == "hello"
+
+    assert outcome.event.ok is True
