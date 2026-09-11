@@ -9,6 +9,7 @@ class ToolExecutionConfig:
 
     timeout_seconds: float | None = None
     max_retries: int = 0
+    retry_delay_seconds: float = 0.0
 
     def __post_init__(self) -> None:
         if (
@@ -22,4 +23,9 @@ class ToolExecutionConfig:
         if self.max_retries < 0:
             raise ValueError(
                 "max_retries must be greater than or equal to zero."
+            )
+
+        if self.retry_delay_seconds < 0:
+            raise ValueError(
+                "retry_delay_seconds must be greater than or equal to zero."
             )

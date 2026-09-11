@@ -427,3 +427,89 @@ def test_executor_stops_after_max_retries():
 
     # Initial attempt + 2 retries.
     assert tool.calls == 3
+
+
+class DelayedRetryTool:
+
+    name = "delayed_retry"
+
+    description = "Fails once before succeeding."
+
+    input_schema: ClassVar[dict] = {
+
+        "type": "object",
+
+        "properties": {},
+
+        "required": [],
+
+    }
+
+    supports_retry = True
+
+    def __init__(self):
+
+        self.calls = 0
+
+    def execute(self, arguments):
+
+        self.calls += 1
+
+        if self.calls == 1:
+
+            raise RuntimeError("Temporary failure")
+
+        return "success"
+
+
+def test_executor_waits_before_retrying():
+
+    registry = ToolRegistry()
+
+    tool = DelayedRetryTool()
+
+    registry.register(tool)
+
+    retry_delay_seconds = 0.05
+
+    executor = ToolExecutor(
+
+        registry,
+
+        config=ToolExecutionConfig(
+
+            max_retries=1,
+
+            retry_delay_seconds=retry_delay_seconds,
+
+        ),
+
+    )
+
+    started_at = time.perf_counter()
+
+    result = executor.execute(
+
+        ToolCall(
+
+            name="delayed_retry",
+
+            arguments={},
+
+        )
+
+    )
+
+    elapsed_seconds = (
+
+        time.perf_counter() - started_at
+
+    )
+
+    assert result.ok is True
+
+    assert result.result == "success"
+
+    assert tool.calls == 2
+
+    assert elapsed_seconds >= retry_delay_seconds

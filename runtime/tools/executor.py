@@ -48,7 +48,6 @@ class ToolExecutor:
         context: ToolExecutionContext | None = None,
     ) -> ToolExecutionResult:
         """Execute a tool and return its structured result."""
-
         return self.execute_with_outcome(
             tool_call,
             context=context,
@@ -64,7 +63,6 @@ class ToolExecutor:
         Execute a tool and return both its result and
         operational execution event.
         """
-
         started_at = time.perf_counter()
 
         try:
@@ -156,8 +154,11 @@ class ToolExecutor:
         Execute a tool and retry execution failures when the
         tool explicitly supports retries.
         """
-
         max_retries = self.config.max_retries
+        retry_delay_seconds = (
+            self.config.retry_delay_seconds
+        )
+
         supports_retry = getattr(
             tool,
             "supports_retry",
@@ -185,6 +186,9 @@ class ToolExecutor:
                 if attempt == attempts - 1:
                     raise
 
+                if retry_delay_seconds > 0:
+                    time.sleep(retry_delay_seconds)
+
         if last_error is not None:
             raise last_error
 
@@ -200,7 +204,6 @@ class ToolExecutor:
         context: ToolExecutionContext | None = None,
     ) -> object:
         """Execute a tool, applying the configured timeout."""
-
         timeout_seconds = self.config.timeout_seconds
 
         if timeout_seconds is None:

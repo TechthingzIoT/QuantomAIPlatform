@@ -65,3 +65,38 @@ def test_config_rejects_negative_retry_count(
         ToolExecutionConfig(
             max_retries=max_retries,
         )
+
+
+def test_config_defaults_to_no_retry_delay():
+    config = ToolExecutionConfig()
+
+    assert config.retry_delay_seconds == 0.0
+
+
+def test_config_accepts_positive_retry_delay():
+    config = ToolExecutionConfig(
+        retry_delay_seconds=0.5,
+    )
+
+    assert config.retry_delay_seconds == 0.5
+
+
+@pytest.mark.parametrize(
+    "retry_delay_seconds",
+    [
+        -1,
+        -0.1,
+    ],
+)
+def test_config_rejects_negative_retry_delay(
+    retry_delay_seconds,
+):
+    with pytest.raises(
+        ValueError,
+        match=(
+            "retry_delay_seconds must be greater than or equal to zero."
+        ),
+    ):
+        ToolExecutionConfig(
+            retry_delay_seconds=retry_delay_seconds,
+        )
