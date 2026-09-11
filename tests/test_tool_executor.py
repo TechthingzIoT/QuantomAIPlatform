@@ -1,5 +1,8 @@
+import time
 from typing import ClassVar
 
+from runtime.tools.config import ToolExecutionConfig
+from runtime.tools.errors import ToolExecutionTimeoutError
 from runtime.tools.executor import ToolExecutor
 from runtime.tools.protocol import ToolCall
 from runtime.tools.registry import ToolRegistry
@@ -239,3 +242,42 @@ def test_executor_keeps_legacy_tool_api_unchanged():
     assert result.ok is True
 
     assert result.result == "legacy"
+
+
+class SlowTool:
+    name = "slow"
+    description = "Sleeps before returning."
+
+    input_schema: ClassVar[dict] = {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+
+    def execute(self, arguments):
+        time.sleep(0.2)
+        return "finished"
+
+
+def test_executor_returns_timeout_failure():
+    registry = ToolRegistry()
+    registry.register(SlowTool())
+
+    executor = ToolExecutor(
+        registry,
+        config=ToolExecutionConfig(
+            timeout_seconds=0.05,
+        ),
+    )
+
+    result = executor.execute(
+        ToolCall(
+            name="slow",
+            arguments={},
+        )
+    )
+
+    assert result.ok is False
+    assert result.error_type == (
+        ToolExecutionTimeoutError.__name__
+    )

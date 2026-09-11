@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 
+from runtime.tools.config import ToolExecutionConfig
 from runtime.tools.context import ToolExecutionContext
+from runtime.tools.errors import ToolExecutionTimeoutError
 from runtime.tools.event import ToolExecutionEvent
 from runtime.tools.outcome import ToolExecutionOutcome
 from runtime.tools.policy import (
@@ -23,12 +27,18 @@ class ToolExecutor:
         registry: ToolRegistry,
         *,
         policy: ToolPolicy | None = None,
+        config: ToolExecutionConfig | None = None,
     ) -> None:
         self.registry = registry
         self.policy = (
             policy
             if policy is not None
             else AllowAllToolPolicy()
+        )
+        self.config = (
+            config
+            if config is not None
+            else ToolExecutionConfig()
         )
 
     def execute(
@@ -38,6 +48,7 @@ class ToolExecutor:
         context: ToolExecutionContext | None = None,
     ) -> ToolExecutionResult:
         """Execute a tool and return its structured result."""
+
         return self.execute_with_outcome(
             tool_call,
             context=context,
@@ -53,6 +64,7 @@ class ToolExecutor:
         Execute a tool and return both its result and
         operational execution event.
         """
+
         started_at = time.perf_counter()
 
         try:
@@ -82,22 +94,11 @@ class ToolExecutor:
                 tool_call.arguments,
             )
 
-            if (
-                context is not None
-                and getattr(
-                    tool,
-                    "supports_context",
-                    False,
-                )
-            ):
-                result = tool.execute(
-                    tool_call.arguments,
-                    context=context,
-                )
-            else:
-                result = tool.execute(
-                    tool_call.arguments
-                )
+            result = self._execute_tool(
+                tool,
+                tool_call.arguments,
+                context=context,
+            )
 
             execution_result = ToolExecutionResult.success(
                 result
@@ -143,3 +144,74 @@ class ToolExecutor:
             result=execution_result,
             event=event,
         )
+
+    def _execute_tool(
+        self,
+        tool: object,
+        arguments: dict,
+        *,
+        context: ToolExecutionContext | None = None,
+    ) -> object:
+        """Execute a tool, applying the configured timeout."""
+
+        timeout_seconds = self.config.timeout_seconds
+
+        if timeout_seconds is None:
+            return self._invoke_tool(
+                tool,
+                arguments,
+                context=context,
+            )
+
+        executor = ThreadPoolExecutor(
+            max_workers=1
+        )
+
+        future = executor.submit(
+            self._invoke_tool,
+            tool,
+            arguments,
+            context=context,
+        )
+
+        try:
+            return future.result(
+                timeout=timeout_seconds
+            )
+
+        except FutureTimeoutError as exc:
+            future.cancel()
+
+            raise ToolExecutionTimeoutError(
+                "Tool execution exceeded "
+                f"{timeout_seconds} seconds."
+            ) from exc
+
+        finally:
+            executor.shutdown(
+                wait=False,
+                cancel_futures=True,
+            )
+
+    @staticmethod
+    def _invoke_tool(
+        tool: object,
+        arguments: dict,
+        *,
+        context: ToolExecutionContext | None = None,
+    ) -> object:
+        """Invoke a tool while preserving legacy tool compatibility."""
+
+        supports_context = getattr(
+            tool,
+            "supports_context",
+            False,
+        )
+
+        if context is not None and supports_context:
+            return tool.execute(
+                arguments,
+                context=context,
+            )
+
+        return tool.execute(arguments)
