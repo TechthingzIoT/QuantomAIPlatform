@@ -156,6 +156,11 @@ class ToolExecutor:
                 if context is not None
                 else None
             ),
+            run_id=(
+                context.run_id
+                if context is not None
+                else None
+            ),
             agent_name=(
                 context.agent_name
                 if context is not None

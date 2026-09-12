@@ -546,3 +546,288 @@ def test_telemetry_returns_zero_metrics_for_unknown_iteration():
     assert metrics.failure_rate == 0.0
     assert metrics.total_execution_time_ms == 0.0
     assert metrics.average_execution_time_ms == 0.0
+
+def test_telemetry_returns_events_for_run():
+
+    telemetry = ToolExecutionTelemetry()
+
+    first_event = ToolExecutionEvent(
+        tool_name="search",
+        elapsed_ms=10.0,
+        ok=True,
+        run_id="run-1",
+    )
+
+    second_event = ToolExecutionEvent(
+        tool_name="calculator",
+        elapsed_ms=5.0,
+        ok=True,
+        run_id="run-2",
+    )
+
+    third_event = ToolExecutionEvent(
+        tool_name="browser",
+        elapsed_ms=20.0,
+        ok=False,
+        run_id="run-1",
+    )
+
+    telemetry.record(first_event)
+    telemetry.record(second_event)
+    telemetry.record(third_event)
+
+    assert telemetry.events_for_run("run-1") == [
+        first_event,
+        third_event,
+    ]
+
+
+def test_telemetry_returns_empty_events_for_unknown_run():
+
+    telemetry = ToolExecutionTelemetry()
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="search",
+            elapsed_ms=10.0,
+            ok=True,
+            run_id="run-1",
+        )
+    )
+
+    assert telemetry.events_for_run("unknown-run") == []
+
+
+def test_telemetry_returns_unique_run_ids():
+
+    telemetry = ToolExecutionTelemetry()
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="search",
+            elapsed_ms=10.0,
+            ok=True,
+            run_id="run-1",
+        )
+    )
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="calculator",
+            elapsed_ms=5.0,
+            ok=True,
+            run_id="run-2",
+        )
+    )
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="browser",
+            elapsed_ms=20.0,
+            ok=False,
+            run_id="run-1",
+        )
+    )
+
+    assert telemetry.run_ids() == [
+        "run-1",
+        "run-2",
+    ]
+
+
+def test_telemetry_returns_metrics_for_specific_run():
+
+    telemetry = ToolExecutionTelemetry()
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="search",
+            elapsed_ms=10.0,
+            ok=True,
+            run_id="run-1",
+        )
+    )
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="browser",
+            elapsed_ms=20.0,
+            ok=False,
+            run_id="run-1",
+        )
+    )
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="calculator",
+            elapsed_ms=5.0,
+            ok=True,
+            run_id="run-2",
+        )
+    )
+
+    metrics = telemetry.metrics_for_run("run-1")
+
+    assert metrics.total_executions == 2
+    assert metrics.successful_executions == 1
+    assert metrics.failed_executions == 1
+    assert metrics.success_rate == 50.0
+    assert metrics.failure_rate == 50.0
+    assert metrics.total_execution_time_ms == 30.0
+    assert metrics.average_execution_time_ms == 15.0
+
+
+def test_telemetry_returns_zero_metrics_for_unknown_run():
+
+    telemetry = ToolExecutionTelemetry()
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="search",
+            elapsed_ms=10.0,
+            ok=True,
+            run_id="run-1",
+        )
+    )
+
+    metrics = telemetry.metrics_for_run("unknown-run")
+
+    assert metrics.total_executions == 0
+    assert metrics.successful_executions == 0
+    assert metrics.failed_executions == 0
+    assert metrics.success_rate == 0.0
+    assert metrics.failure_rate == 0.0
+    assert metrics.total_execution_time_ms == 0.0
+    assert metrics.average_execution_time_ms == 0.0
+
+
+def test_telemetry_report_groups_metrics_by_run():
+
+    telemetry = ToolExecutionTelemetry()
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="search",
+            elapsed_ms=10.0,
+            ok=True,
+            run_id="run-1",
+        )
+    )
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="browser",
+            elapsed_ms=20.0,
+            ok=False,
+            run_id="run-1",
+        )
+    )
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="calculator",
+            elapsed_ms=5.0,
+            ok=True,
+            run_id="run-2",
+        )
+    )
+
+    report = telemetry.report()
+
+    assert list(report.by_run) == [
+        "run-1",
+        "run-2",
+    ]
+
+    run_1_metrics = report.by_run["run-1"]
+
+    assert run_1_metrics.total_executions == 2
+    assert run_1_metrics.successful_executions == 1
+    assert run_1_metrics.failed_executions == 1
+    assert run_1_metrics.total_execution_time_ms == 30.0
+
+def test_telemetry_query_filters_by_run_id():
+
+    telemetry = ToolExecutionTelemetry()
+
+    first_event = ToolExecutionEvent(
+        tool_name="search",
+        elapsed_ms=10.0,
+        ok=True,
+        run_id="run-1",
+    )
+
+    second_event = ToolExecutionEvent(
+        tool_name="calculator",
+        elapsed_ms=5.0,
+        ok=True,
+        run_id="run-2",
+    )
+
+    third_event = ToolExecutionEvent(
+        tool_name="browser",
+        elapsed_ms=20.0,
+        ok=False,
+        run_id="run-1",
+    )
+
+    telemetry.record(first_event)
+    telemetry.record(second_event)
+    telemetry.record(third_event)
+
+    from runtime.tools.query import ToolTelemetryQuery
+
+    results = telemetry.query(
+        ToolTelemetryQuery(run_id="run-1")
+    )
+
+    assert results == [
+        first_event,
+        third_event,
+    ]
+
+
+def test_telemetry_query_combines_run_id_with_other_filters():
+
+    telemetry = ToolExecutionTelemetry()
+
+    matching_event = ToolExecutionEvent(
+        tool_name="search",
+        elapsed_ms=10.0,
+        ok=True,
+        run_id="run-1",
+        agent_name="research_agent",
+    )
+
+    wrong_run = ToolExecutionEvent(
+        tool_name="search",
+        elapsed_ms=5.0,
+        ok=True,
+        run_id="run-2",
+        agent_name="research_agent",
+    )
+
+    wrong_tool = ToolExecutionEvent(
+        tool_name="calculator",
+        elapsed_ms=20.0,
+        ok=True,
+        run_id="run-1",
+        agent_name="research_agent",
+    )
+
+    telemetry.record(matching_event)
+    telemetry.record(wrong_run)
+    telemetry.record(wrong_tool)
+
+    from runtime.tools.query import ToolTelemetryQuery
+
+    results = telemetry.query(
+        ToolTelemetryQuery(
+            run_id="run-1",
+            tool_name="search",
+            agent_name="research_agent",
+        )
+    )
+
+    assert results == [matching_event]
+

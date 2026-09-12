@@ -71,6 +71,8 @@ def test_agent_run_with_outcome_records_tool_events_in_run_and_telemetry():
     )
 
     assert outcome.content == "Tool execution complete."
+    assert isinstance(outcome.run_id, str)
+    assert outcome.run_id
 
     assert len(outcome.tool_events) == 1
     assert len(agent.telemetry) == 1
@@ -82,8 +84,28 @@ def test_agent_run_with_outcome_records_tool_events_in_run_and_telemetry():
     assert run_event.tool_name == "echo"
     assert run_event.ok is True
     assert run_event.tool_call_id == "call-1"
+    assert run_event.run_id == outcome.run_id
     assert run_event.agent_name == "test-agent"
     assert run_event.iteration == 0
+
+    assert outcome.telemetry_report is not None
+
+    report = outcome.telemetry_report
+
+    assert report.overall.total_executions == 1
+    assert report.overall.successful_executions == 1
+    assert report.overall.failed_executions == 0
+    assert report.overall.success_rate == 100.0
+    assert report.overall.failure_rate == 0.0
+
+    assert "echo" in report.by_tool
+    assert report.by_tool["echo"].total_executions == 1
+
+    assert "test-agent" in report.by_agent
+    assert report.by_agent["test-agent"].total_executions == 1
+
+    assert 0 in report.by_iteration
+    assert report.by_iteration[0].total_executions == 1
 
 
 def test_agent_run_returns_content_from_run_outcome():

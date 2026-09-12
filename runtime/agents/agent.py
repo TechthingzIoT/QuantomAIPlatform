@@ -12,6 +12,7 @@ augmentation.
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 
 from runtime.agents.outcome import AgentRunOutcome
 from runtime.chat.history import ConversationHistory
@@ -190,6 +191,7 @@ class Agent:
         tool_call: ToolCallRequest,
         *,
         iteration: int,
+        run_id: str,
     ) -> ToolExecutionOutcome:
         """Execute an inference-requested tool with telemetry."""
 
@@ -202,6 +204,7 @@ class Agent:
 
         context = ToolExecutionContext(
             tool_call_id=tool_call.id,
+            run_id=run_id,
             agent_name=self.name,
             metadata={
                 "iteration": iteration,
@@ -271,6 +274,7 @@ class Agent:
 
         self.history.add(user_message)
 
+        run_id = str(uuid4())
         tool_events = []
 
         for iteration in range(self.MAX_TOOL_ITERATIONS):
@@ -290,6 +294,7 @@ class Agent:
                     execution = self._execute_tool_call(
                         tool_call,
                         iteration=iteration,
+                        run_id=run_id,
                     )
 
                     tool_events.append(execution.event)
@@ -319,7 +324,9 @@ class Agent:
 
             return AgentRunOutcome(
                 content=content,
+                run_id=run_id,
                 tool_events=tool_events,
+                telemetry_report=self.telemetry.report(),
             )
 
         raise RuntimeError(

@@ -13,6 +13,8 @@ class ToolTelemetryReport:
 
     by_tool: dict[str, ToolTelemetryMetrics]
 
+    by_run: dict[str, ToolTelemetryMetrics]
+
     by_agent: dict[str, ToolTelemetryMetrics]
 
     by_iteration: dict[int, ToolTelemetryMetrics]

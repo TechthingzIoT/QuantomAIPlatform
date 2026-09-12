@@ -63,6 +63,18 @@ class ToolExecutionTelemetry:
             if event.agent_name == agent_name
         ]
 
+    def events_for_run(
+        self,
+        run_id: str,
+    ) -> list[ToolExecutionEvent]:
+        """Return events associated with a specific run."""
+
+        return [
+            event
+            for event in self._events
+            if event.run_id == run_id
+        ]
+
     def events_for_iteration(
         self,
         iteration: int,
@@ -92,6 +104,10 @@ class ToolExecutionTelemetry:
             if (
                 query.tool_name is None
                 or event.tool_name == query.tool_name
+            )
+            and (
+                query.run_id is None
+                or event.run_id == query.run_id
             )
             and (
                 query.agent_name is None
@@ -146,6 +162,17 @@ class ToolExecutionTelemetry:
                 event.agent_name
                 for event in self._events
                 if event.agent_name is not None
+            )
+        )
+
+    def run_ids(self) -> list[str]:
+        """Return unique run IDs in execution order."""
+
+        return list(
+            dict.fromkeys(
+                event.run_id
+                for event in self._events
+                if event.run_id is not None
             )
         )
 
@@ -242,6 +269,16 @@ class ToolExecutionTelemetry:
             self.events_for_agent(agent_name)
         )
 
+    def metrics_for_run(
+        self,
+        run_id: str,
+    ) -> ToolTelemetryMetrics:
+        """Return aggregated telemetry metrics for a specific run."""
+
+        return self._calculate_metrics(
+            self.events_for_run(run_id)
+        )
+
     def metrics_for_iteration(
         self,
         iteration: int,
@@ -325,6 +362,10 @@ class ToolExecutionTelemetry:
             by_tool={
                 tool_name: self.metrics_for_tool(tool_name)
                 for tool_name in self.tool_names()
+            },
+            by_run={
+                run_id: self.metrics_for_run(run_id)
+                for run_id in self.run_ids()
             },
             by_agent={
                 agent_name: self.metrics_for_agent(agent_name)

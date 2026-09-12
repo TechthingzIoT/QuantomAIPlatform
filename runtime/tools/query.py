@@ -9,6 +9,8 @@ class ToolTelemetryQuery:
 
     tool_name: str | None = None
 
+    run_id: str | None = None
+
     agent_name: str | None = None
 
     iteration: int | None = None
