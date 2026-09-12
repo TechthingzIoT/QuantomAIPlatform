@@ -16,7 +16,7 @@ class RetryPolicy(Protocol):
 
 
 class DefaultRetryPolicy:
-    """Default retry classification policy."""
+    """Default retry policy preserving standard tool retry behavior."""
 
     def should_retry(
         self,
