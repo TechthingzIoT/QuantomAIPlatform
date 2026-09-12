@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 from runtime.tools.event import ToolExecutionEvent
 from runtime.tools.metrics import ToolTelemetryMetrics
+from runtime.tools.query import ToolTelemetryQuery
 
 
 class ToolExecutionTelemetry:
@@ -71,6 +72,38 @@ class ToolExecutionTelemetry:
             event
             for event in self._events
             if event.iteration == iteration
+        ]
+
+    def query(
+        self,
+        query: ToolTelemetryQuery,
+    ) -> list[ToolExecutionEvent]:
+        """Return execution events matching the query filters."""
+
+        if not isinstance(query, ToolTelemetryQuery):
+            raise TypeError(
+                "query must be a ToolTelemetryQuery."
+            )
+
+        return [
+            event
+            for event in self._events
+            if (
+                query.tool_name is None
+                or event.tool_name == query.tool_name
+            )
+            and (
+                query.agent_name is None
+                or event.agent_name == query.agent_name
+            )
+            and (
+                query.iteration is None
+                or event.iteration == query.iteration
+            )
+            and (
+                query.ok is None
+                or event.ok == query.ok
+            )
         ]
 
     def successful(self) -> list[ToolExecutionEvent]:
