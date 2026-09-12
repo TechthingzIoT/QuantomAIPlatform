@@ -19,6 +19,7 @@ from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
 from runtime.inference.response import ToolCallRequest
+from runtime.runs.service import RunService
 from runtime.tools.context import ToolExecutionContext
 from runtime.tools.executor import ToolExecutor
 from runtime.tools.outcome import ToolExecutionOutcome
@@ -41,6 +42,7 @@ class Agent:
         name: str = DEFAULT_NAME,
         tool_registry: ToolRegistry | None = None,
         telemetry: ToolExecutionTelemetry | None = None,
+        run_service: RunService | None = None,
     ) -> None:
         if not isinstance(name, str):
             raise TypeError("name must be a string.")
@@ -61,6 +63,13 @@ class Agent:
             if telemetry is not None
             else ToolExecutionTelemetry()
         )
+
+        self.run_service = (
+            run_service
+            if run_service is not None
+            else RunService(telemetry=self.telemetry)
+        )
+
         self.running = False
 
     # ==================================================
@@ -275,60 +284,81 @@ class Agent:
         self.history.add(user_message)
 
         run_id = str(uuid4())
+
+        self.run_service.create(run_id)
+        self.run_service.start(run_id)
+
         tool_events = []
 
-        for iteration in range(self.MAX_TOOL_ITERATIONS):
-            messages = self.history.to_messages()
-            tools = self.tool_registry.definitions() or None
+        try:
+            for iteration in range(self.MAX_TOOL_ITERATIONS):
+                messages = self.history.to_messages()
+                tools = self.tool_registry.definitions() or None
 
-            response = self.runtime.generate(
-                messages,
-                tools=tools,
-                use_knowledge=True,
-            )
-
-            if response.tool_calls:
-                self._record_tool_calls(response.tool_calls)
-
-                for tool_call in response.tool_calls:
-                    execution = self._execute_tool_call(
-                        tool_call,
-                        iteration=iteration,
-                        run_id=run_id,
-                    )
-
-                    tool_events.append(execution.event)
-                    self.telemetry.record(execution.event)
-
-                    self._record_tool_result(
-                        tool_call,
-                        execution.result.to_dict(),
-                    )
-
-                continue
-
-            content = response.content
-
-            if content is None:
-                raise RuntimeError(
-                    "Inference response did not contain assistant "
-                    "content or tool calls."
+                response = self.runtime.generate(
+                    messages,
+                    tools=tools,
+                    use_knowledge=True,
                 )
 
-            assistant_message = ChatMessage(
-                role=MessageRole.ASSISTANT,
-                content=content,
+                if response.tool_calls:
+                    self._record_tool_calls(response.tool_calls)
+
+                    for tool_call in response.tool_calls:
+                        execution = self._execute_tool_call(
+                            tool_call,
+                            iteration=iteration,
+                            run_id=run_id,
+                        )
+
+                        tool_events.append(execution.event)
+                        self.telemetry.record(execution.event)
+
+                        self._record_tool_result(
+                            tool_call,
+                            execution.result.to_dict(),
+                        )
+
+                    continue
+
+                content = response.content
+
+                if content is None:
+                    raise RuntimeError(
+                        "Inference response did not contain assistant "
+                        "content or tool calls."
+                    )
+
+                assistant_message = ChatMessage(
+                    role=MessageRole.ASSISTANT,
+                    content=content,
+                )
+
+                self.history.add(assistant_message)
+
+                self.run_service.complete(run_id)
+
+                return AgentRunOutcome(
+                    content=content,
+                    run_id=run_id,
+                    tool_events=tool_events,
+                    telemetry_report=self.telemetry.report(),
+                )
+
+            raise RuntimeError(
+                "Maximum tool execution iterations exceeded."
             )
 
-            self.history.add(assistant_message)
+        except Exception as exc:
+            run = self.run_service.get(run_id)
 
-            return AgentRunOutcome(
-                content=content,
-                run_id=run_id,
-                tool_events=tool_events,
-                telemetry_report=self.telemetry.report(),
-            )
+            if run is not None:
+                from runtime.runs.status import RunStatus
 
-        raise RuntimeError(
-            "Maximum tool execution iterations exceeded."
-        )
+                if run.status.value == RunStatus.RUNNING.value:
+                    self.run_service.fail(
+                        run_id,
+                        str(exc),
+                    )
+
+            raise
