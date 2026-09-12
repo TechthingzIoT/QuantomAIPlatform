@@ -183,3 +183,62 @@ def test_telemetry_clear_removes_events():
 
     assert len(telemetry) == 0
     assert telemetry.events() == []
+
+
+def test_telemetry_returns_aggregated_metrics():
+    telemetry = ToolExecutionTelemetry()
+
+    telemetry.record(
+        make_event(
+            tool_name="tool_a",
+            elapsed_ms=10.0,
+            ok=True,
+        )
+    )
+
+    telemetry.record(
+        make_event(
+            tool_name="tool_b",
+            elapsed_ms=20.0,
+            ok=False,
+        )
+    )
+
+    telemetry.record(
+        make_event(
+            tool_name="tool_c",
+            elapsed_ms=30.0,
+            ok=True,
+        )
+    )
+
+    metrics = telemetry.metrics()
+
+    assert metrics.total_executions == 3
+    assert metrics.successful_executions == 2
+    assert metrics.failed_executions == 1
+
+    assert metrics.success_rate == (
+        2 / 3
+    ) * 100
+
+    assert metrics.failure_rate == (
+        1 / 3
+    ) * 100
+
+    assert metrics.total_execution_time_ms == 60.0
+    assert metrics.average_execution_time_ms == 20.0
+
+
+def test_telemetry_returns_zero_metrics_when_empty():
+    telemetry = ToolExecutionTelemetry()
+
+    metrics = telemetry.metrics()
+
+    assert metrics.total_executions == 0
+    assert metrics.successful_executions == 0
+    assert metrics.failed_executions == 0
+    assert metrics.success_rate == 0.0
+    assert metrics.failure_rate == 0.0
+    assert metrics.total_execution_time_ms == 0
+    assert metrics.average_execution_time_ms == 0.0

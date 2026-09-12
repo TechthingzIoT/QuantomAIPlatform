@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from runtime.tools.event import ToolExecutionEvent
+from runtime.tools.metrics import ToolTelemetryMetrics
 
 
 class ToolExecutionTelemetry:
@@ -115,6 +116,27 @@ class ToolExecutionTelemetry:
         return (
             self.total_execution_time_ms()
             / total
+        )
+
+    def metrics(self) -> ToolTelemetryMetrics:
+        """Return an aggregated snapshot of telemetry metrics."""
+
+        return ToolTelemetryMetrics(
+            total_executions=self.total_executions(),
+            successful_executions=(
+                self.successful_execution_count()
+            ),
+            failed_executions=(
+                self.failed_execution_count()
+            ),
+            success_rate=self.success_rate(),
+            failure_rate=self.failure_rate(),
+            total_execution_time_ms=(
+                self.total_execution_time_ms()
+            ),
+            average_execution_time_ms=(
+                self.average_execution_time_ms()
+            ),
         )
 
     def clear(self) -> None:
