@@ -21,6 +21,11 @@ from runtime.tools.retry import (
     FixedRetryStrategy,
     RetryStrategy,
 )
+from runtime.tools.retry_policy import (
+    DefaultRetryPolicy,
+    RetryPolicy,
+)
+from runtime.tools.telemetry import ToolExecutionTelemetry
 from runtime.tools.validation import validate_tool_arguments
 
 
@@ -33,6 +38,8 @@ class ToolExecutor:
         *,
         policy: ToolPolicy | None = None,
         config: ToolExecutionConfig | None = None,
+        retry_policy: RetryPolicy | None = None,
+        telemetry: ToolExecutionTelemetry | None = None,
     ) -> None:
         self.registry = registry
         self.policy = (
@@ -45,6 +52,14 @@ class ToolExecutor:
             if config is not None
             else ToolExecutionConfig()
         )
+
+        self.retry_policy = (
+            retry_policy
+            if retry_policy is not None
+            else DefaultRetryPolicy()
+        )
+
+        self.telemetry = telemetry
 
     def execute(
         self,
@@ -153,10 +168,15 @@ class ToolExecutor:
             error_message=execution_result.error_message,
         )
 
-        return ToolExecutionOutcome(
+        outcome = ToolExecutionOutcome(
             result=execution_result,
             event=event,
         )
+
+        if self.telemetry is not None:
+            self.telemetry.record(event)
+
+        return outcome
 
     def _get_retry_strategy(self) -> RetryStrategy:
         """Return the configured retry strategy."""
@@ -216,6 +236,12 @@ class ToolExecutor:
                 last_error = exc
 
                 if attempt == attempts - 1:
+                    raise
+
+                if not self.retry_policy.should_retry(
+                    exc,
+                    attempt=attempt,
+                ):
                     raise
 
                 delay_seconds = (

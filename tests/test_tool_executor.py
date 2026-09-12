@@ -6,6 +6,7 @@ from runtime.tools.errors import ToolExecutionTimeoutError
 from runtime.tools.executor import ToolExecutor
 from runtime.tools.protocol import ToolCall
 from runtime.tools.registry import ToolRegistry
+from runtime.tools.telemetry import ToolExecutionTelemetry
 
 
 class EchoTool:
@@ -333,6 +334,66 @@ def test_executor_retries_retryable_tool():
     assert result.ok is True
     assert result.result == "recovered"
     assert tool.calls == 2
+
+
+class NeverRetryPolicy:
+
+    """Reject every retry attempt."""
+
+    def should_retry(
+
+        self,
+
+        error: Exception,
+
+        *,
+
+        attempt: int,
+
+    ) -> bool:
+
+        return False
+
+
+def test_executor_stops_retry_when_policy_rejects_error():
+
+    registry = ToolRegistry()
+
+    tool = RetryableFlakyTool()
+
+    registry.register(tool)
+
+    executor = ToolExecutor(
+
+        registry,
+
+        config=ToolExecutionConfig(
+
+            max_retries=3,
+
+        ),
+
+        retry_policy=NeverRetryPolicy(),
+
+    )
+
+    result = executor.execute(
+
+        ToolCall(
+
+            name="retryable_flaky",
+
+            arguments={},
+
+        )
+
+    )
+
+    assert result.ok is False
+
+    assert result.error_type == "RuntimeError"
+
+    assert tool.calls == 1
 
 
 class NonRetryableFlakyTool:
@@ -768,3 +829,67 @@ def test_executor_exponential_retry_strategy_increases_delays():
 
     assert elapsed_seconds >= retry_delay_seconds * 3
 
+
+
+def test_executor_records_successful_execution_in_telemetry():
+
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+
+    telemetry = ToolExecutionTelemetry()
+
+    executor = ToolExecutor(
+        registry,
+        telemetry=telemetry,
+    )
+
+    result = executor.execute(
+        ToolCall(
+            name="echo",
+            arguments={
+                "text": "QAIR",
+            },
+        )
+    )
+
+    assert result.ok is True
+    assert len(telemetry) == 1
+
+    event = telemetry.events()[0]
+
+    assert event.tool_name == "echo"
+    assert event.ok is True
+    assert event.attempt_count == 1
+    assert event.retry_count == 0
+
+
+def test_executor_records_failed_execution_in_telemetry():
+
+    registry = ToolRegistry()
+
+    tool = NonRetryableFlakyTool()
+    registry.register(tool)
+
+    telemetry = ToolExecutionTelemetry()
+
+    executor = ToolExecutor(
+        registry,
+        telemetry=telemetry,
+    )
+
+    result = executor.execute(
+        ToolCall(
+            name="non_retryable_flaky",
+            arguments={},
+        )
+    )
+
+    assert result.ok is False
+    assert len(telemetry) == 1
+
+    event = telemetry.events()[0]
+
+    assert event.tool_name == "non_retryable_flaky"
+    assert event.ok is False
+    assert event.error_type == "RuntimeError"
+    assert event.error_message == "Failure"
