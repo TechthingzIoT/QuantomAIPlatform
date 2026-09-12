@@ -61,6 +61,18 @@ class ToolExecutionTelemetry:
             if event.agent_name == agent_name
         ]
 
+    def events_for_iteration(
+        self,
+        iteration: int,
+    ) -> list[ToolExecutionEvent]:
+        """Return execution events for a specific iteration."""
+
+        return [
+            event
+            for event in self._events
+            if event.iteration == iteration
+        ]
+
     def successful(self) -> list[ToolExecutionEvent]:
 
         """Return successful execution events."""
@@ -162,6 +174,16 @@ class ToolExecutionTelemetry:
 
         return self._calculate_metrics(
             self.events_for_agent(agent_name)
+        )
+
+    def metrics_for_iteration(
+        self,
+        iteration: int,
+    ) -> ToolTelemetryMetrics:
+        """Return aggregated telemetry metrics for a specific iteration."""
+
+        return self._calculate_metrics(
+            self.events_for_iteration(iteration)
         )
 
     def _calculate_metrics(
