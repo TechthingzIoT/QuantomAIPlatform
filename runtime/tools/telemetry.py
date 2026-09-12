@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from runtime.tools.event import ToolExecutionEvent
 from runtime.tools.metrics import ToolTelemetryMetrics
 from runtime.tools.query import ToolTelemetryQuery
+from runtime.tools.report import ToolTelemetryReport
 
 
 class ToolExecutionTelemetry:
@@ -137,6 +138,28 @@ class ToolExecutionTelemetry:
             )
         )
 
+    def agent_names(self) -> list[str]:
+        """Return unique agent names in execution order."""
+
+        return list(
+            dict.fromkeys(
+                event.agent_name
+                for event in self._events
+                if event.agent_name is not None
+            )
+        )
+
+    def iterations(self) -> list[int]:
+        """Return unique iteration numbers in execution order."""
+
+        return list(
+            dict.fromkeys(
+                event.iteration
+                for event in self._events
+                if event.iteration is not None
+            )
+        )
+
     def total_executions(self) -> int:
 
         """Return the total number of executions."""
@@ -185,6 +208,16 @@ class ToolExecutionTelemetry:
 
         return self._calculate_metrics(
             self._events
+        )
+
+    def metrics_for_query(
+        self,
+        query: ToolTelemetryQuery,
+    ) -> ToolTelemetryMetrics:
+        """Return aggregated telemetry metrics matching a query."""
+
+        return self._calculate_metrics(
+            self.query(query)
         )
 
     def metrics_for_tool(
@@ -282,6 +315,25 @@ class ToolExecutionTelemetry:
             average_execution_time_ms=(
                 average_execution_time_ms
             ),
+        )
+
+    def report(self) -> ToolTelemetryReport:
+        """Return a complete analytics report for recorded telemetry."""
+
+        return ToolTelemetryReport(
+            overall=self.metrics(),
+            by_tool={
+                tool_name: self.metrics_for_tool(tool_name)
+                for tool_name in self.tool_names()
+            },
+            by_agent={
+                agent_name: self.metrics_for_agent(agent_name)
+                for agent_name in self.agent_names()
+            },
+            by_iteration={
+                iteration: self.metrics_for_iteration(iteration)
+                for iteration in self.iterations()
+            },
         )
 
     def clear(self) -> None:

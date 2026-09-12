@@ -265,3 +265,80 @@ def test_telemetry_query_returns_empty_list_when_nothing_matches():
     )
 
     assert events == []
+
+
+def test_telemetry_returns_metrics_for_query():
+
+    telemetry = ToolExecutionTelemetry()
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="search",
+            elapsed_ms=10.0,
+            ok=True,
+            agent_name="research_agent",
+            iteration=1,
+        )
+    )
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="search",
+            elapsed_ms=20.0,
+            ok=False,
+            agent_name="research_agent",
+            iteration=1,
+        )
+    )
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="calculator",
+            elapsed_ms=5.0,
+            ok=True,
+            agent_name="math_agent",
+            iteration=1,
+        )
+    )
+
+    metrics = telemetry.metrics_for_query(
+        ToolTelemetryQuery(
+            tool_name="search",
+            agent_name="research_agent",
+        )
+    )
+
+    assert metrics.total_executions == 2
+    assert metrics.successful_executions == 1
+    assert metrics.failed_executions == 1
+    assert metrics.success_rate == 50.0
+    assert metrics.failure_rate == 50.0
+    assert metrics.total_execution_time_ms == 30.0
+    assert metrics.average_execution_time_ms == 15.0
+
+
+def test_telemetry_returns_zero_metrics_for_query_with_no_matches():
+
+    telemetry = ToolExecutionTelemetry()
+
+    telemetry.record(
+        ToolExecutionEvent(
+            tool_name="search",
+            elapsed_ms=10.0,
+            ok=True,
+        )
+    )
+
+    metrics = telemetry.metrics_for_query(
+        ToolTelemetryQuery(
+            tool_name="unknown",
+        )
+    )
+
+    assert metrics.total_executions == 0
+    assert metrics.successful_executions == 0
+    assert metrics.failed_executions == 0
+    assert metrics.success_rate == 0.0
+    assert metrics.failure_rate == 0.0
+    assert metrics.total_execution_time_ms == 0.0
+    assert metrics.average_execution_time_ms == 0.0
