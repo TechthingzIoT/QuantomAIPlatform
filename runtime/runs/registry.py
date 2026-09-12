@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from runtime.runs.query import RunQuery
 from runtime.runs.run import Run
 from runtime.runs.status import RunStatus
 
@@ -71,6 +72,26 @@ class RunRegistry:
         """Remove and return a run by ID."""
 
         return self._runs.pop(run_id, None)
+
+    def query(
+        self,
+        query: RunQuery,
+    ) -> list[Run]:
+        """Return runs matching the query filters."""
+
+        if not isinstance(query, RunQuery):
+            raise TypeError(
+                "query must be a RunQuery."
+            )
+
+        return [
+            run
+            for run in self._runs.values()
+            if (
+                query.status is None
+                or run.status == query.status
+            )
+        ]
 
     def clear(self) -> None:
         """Remove all registered runs."""
