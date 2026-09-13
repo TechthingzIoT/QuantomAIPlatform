@@ -16,6 +16,8 @@ Responsibilities
 from typing import Self
 
 from runtime.config.settings import settings
+from runtime.events.event import RuntimeEvent
+from runtime.events.query import RuntimeEventQuery
 from runtime.inference.engine import InferenceEngine
 from runtime.inference.response import InferenceResponse
 from runtime.knowledge.context import KnowledgeContextBuilder
@@ -204,6 +206,45 @@ class QAIRRuntime:
         """Remove and return a run by ID."""
 
         return self.run_service.remove(run_id)
+
+    # ==================================================
+    # Event Management
+    # ==================================================
+
+    @property
+    def event_store(self):
+        """Return the shared QAIR runtime event store."""
+
+        return self.run_service.event_store
+
+    def list_events(self) -> list[RuntimeEvent]:
+        """Return all recorded runtime events."""
+
+        return self.event_store.events()
+
+    def query_events(
+        self,
+        query: RuntimeEventQuery,
+    ) -> list[RuntimeEvent]:
+        """Return runtime events matching the supplied query."""
+
+        return self.event_store.query(query)
+
+    def get_run_events(
+        self,
+        run_id: str,
+    ) -> list[RuntimeEvent]:
+        """Return runtime events associated with a run."""
+
+        return self.event_store.events_for_run(run_id)
+
+    def get_agent_events(
+        self,
+        agent_name: str,
+    ) -> list[RuntimeEvent]:
+        """Return runtime events associated with an agent."""
+
+        return self.event_store.events_for_agent(agent_name)
 
     # ==================================================
     # Lifecycle
