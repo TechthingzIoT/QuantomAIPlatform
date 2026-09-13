@@ -4,6 +4,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 
+from runtime.events.event import RuntimeEvent
+from runtime.events.event_type import RuntimeEventType
+from runtime.events.store import RuntimeEventStore
 from runtime.tools.config import ToolExecutionConfig
 from runtime.tools.context import ToolExecutionContext
 from runtime.tools.errors import ToolExecutionTimeoutError
@@ -40,6 +43,7 @@ class ToolExecutor:
         config: ToolExecutionConfig | None = None,
         retry_policy: RetryPolicy | None = None,
         telemetry: ToolExecutionTelemetry | None = None,
+        event_store: RuntimeEventStore | None = None,
     ) -> None:
         self.registry = registry
         self.policy = (
@@ -60,6 +64,51 @@ class ToolExecutor:
         )
 
         self.telemetry = telemetry
+        self.event_store = event_store
+
+    def _record_runtime_event(
+        self,
+        event_type: RuntimeEventType,
+        *,
+        tool_call: ToolCall,
+        context: ToolExecutionContext | None = None,
+        data: dict | None = None,
+    ) -> None:
+        """Record a tool lifecycle event when an event store is configured."""
+
+        if self.event_store is None:
+            return
+
+        metadata = (
+            context.metadata
+            if context is not None
+            else {}
+        )
+
+        event_data = {
+            "tool_name": tool_call.name,
+        }
+
+        if data:
+            event_data.update(data)
+
+        self.event_store.record(
+            RuntimeEvent(
+                type=event_type,
+                run_id=(
+                    context.run_id
+                    if context is not None
+                    else None
+                ),
+                agent_name=(
+                    context.agent_name
+                    if context is not None
+                    else None
+                ),
+                iteration=metadata.get("iteration"),
+                data=event_data,
+            )
+        )
 
     def execute(
         self,
@@ -87,6 +136,12 @@ class ToolExecutor:
 
         attempt_count = 0
         retry_count = 0
+
+        self._record_runtime_event(
+            RuntimeEventType.TOOL_STARTED,
+            tool_call=tool_call,
+            context=context,
+        )
 
         try:
             decision = self.policy.evaluate(
@@ -177,6 +232,31 @@ class ToolExecutor:
             result=execution_result,
             event=event,
         )
+
+        if execution_result.ok:
+            self._record_runtime_event(
+                RuntimeEventType.TOOL_COMPLETED,
+                tool_call=tool_call,
+                context=context,
+                data={
+                    "elapsed_ms": elapsed_ms,
+                    "attempt_count": attempt_count,
+                    "retry_count": retry_count,
+                },
+            )
+        else:
+            self._record_runtime_event(
+                RuntimeEventType.TOOL_FAILED,
+                tool_call=tool_call,
+                context=context,
+                data={
+                    "elapsed_ms": elapsed_ms,
+                    "attempt_count": attempt_count,
+                    "retry_count": retry_count,
+                    "error_type": execution_result.error_type,
+                    "error_message": execution_result.error_message,
+                },
+            )
 
         if self.telemetry is not None:
             self.telemetry.record(event)

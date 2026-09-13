@@ -20,7 +20,10 @@ from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
 from runtime.events.event import RuntimeEvent
 from runtime.events.event_type import RuntimeEventType
-from runtime.inference.response import ToolCallRequest
+from runtime.inference.response import (
+    InferenceResponse,
+    ToolCallRequest,
+)
 from runtime.runs.service import RunService
 from runtime.tools.context import ToolExecutionContext
 from runtime.tools.executor import ToolExecutor
@@ -83,6 +86,7 @@ class Agent:
         self.tool_executor = ToolExecutor(
             self.tool_registry,
             telemetry=self.telemetry,
+            event_store=self.run_service.event_store,
         )
 
         self.running = False
@@ -110,6 +114,48 @@ class Agent:
                 data=data or {},
             )
         )
+
+    def _generate_with_events(
+        self,
+        messages: list[dict],
+        *,
+        run_id: str,
+        iteration: int | None = None,
+        tools: list[dict] | None = None,
+    ) -> InferenceResponse:
+        """Generate an inference response with lifecycle events."""
+
+        self._record_runtime_event(
+            RuntimeEventType.INFERENCE_STARTED,
+            run_id=run_id,
+            iteration=iteration,
+        )
+
+        try:
+            response = self.runtime.generate(
+                messages,
+                tools=tools,
+                use_knowledge=True,
+            )
+        except Exception as exc:
+            self._record_runtime_event(
+                RuntimeEventType.INFERENCE_FAILED,
+                run_id=run_id,
+                iteration=iteration,
+                data={
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+            )
+            raise
+
+        self._record_runtime_event(
+            RuntimeEventType.INFERENCE_COMPLETED,
+            run_id=run_id,
+            iteration=iteration,
+        )
+
+        return response
 
     # ==================================================
     # Lifecycle
@@ -342,10 +388,11 @@ class Agent:
                 messages = self.history.to_messages()
                 tools = self.tool_registry.definitions() or None
 
-                response = self.runtime.generate(
+                response = self._generate_with_events(
                     messages,
+                    run_id=run_id,
+                    iteration=iteration,
                     tools=tools,
-                    use_knowledge=True,
                 )
 
                 if response.tool_calls:
