@@ -57,8 +57,6 @@ class Agent:
         self.tool_registry = (
             tool_registry if tool_registry is not None else ToolRegistry()
         )
-        self.tool_executor = ToolExecutor(self.tool_registry)
-
         runtime_run_service = getattr(
             self.runtime,
             "run_service",
@@ -78,6 +76,11 @@ class Agent:
             telemetry
             if telemetry is not None
             else self.run_service.telemetry
+        )
+
+        self.tool_executor = ToolExecutor(
+            self.tool_registry,
+            telemetry=self.telemetry,
         )
 
         self.running = False
@@ -325,7 +328,6 @@ class Agent:
                         )
 
                         tool_events.append(execution.event)
-                        self.telemetry.record(execution.event)
 
                         self._record_tool_result(
                             tool_call,
