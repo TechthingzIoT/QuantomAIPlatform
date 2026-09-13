@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from runtime.events.event import RuntimeEvent
+from runtime.events.event_type import RuntimeEventType
+from runtime.events.store import RuntimeEventStore
 from runtime.runs.query import RunQuery
 from runtime.runs.registry import RunRegistry
 from runtime.runs.run import Run
@@ -15,6 +18,7 @@ class RunService:
         self,
         registry: RunRegistry | None = None,
         telemetry: ToolExecutionTelemetry | None = None,
+        event_store: RuntimeEventStore | None = None,
     ) -> None:
         self.registry = (
             registry
@@ -25,6 +29,12 @@ class RunService:
             telemetry
             if telemetry is not None
             else ToolExecutionTelemetry()
+        )
+
+        self.event_store = (
+            event_store
+            if event_store is not None
+            else RuntimeEventStore()
         )
 
     def create(
@@ -67,6 +77,14 @@ class RunService:
 
         run.start()
 
+        self.event_store.record(
+            RuntimeEvent(
+                type=RuntimeEventType.RUN_STARTED,
+                run_id=run.id,
+                agent_name=run.agent_name,
+            )
+        )
+
         return run
 
     def complete(
@@ -78,6 +96,14 @@ class RunService:
         run = self.require(run_id)
 
         run.complete()
+
+        self.event_store.record(
+            RuntimeEvent(
+                type=RuntimeEventType.RUN_COMPLETED,
+                run_id=run.id,
+                agent_name=run.agent_name,
+            )
+        )
 
         return run
 
@@ -142,5 +168,16 @@ class RunService:
         run = self.require(run_id)
 
         run.fail(error)
+
+        self.event_store.record(
+            RuntimeEvent(
+                type=RuntimeEventType.RUN_FAILED,
+                run_id=run.id,
+                agent_name=run.agent_name,
+                data={
+                    "error": error,
+                },
+            )
+        )
 
         return run
