@@ -31,6 +31,7 @@ from runtime.runs.query import RunQuery
 from runtime.runs.run import Run
 from runtime.runs.service import RunService
 from runtime.runs.summary import RunSummary
+from runtime.runs.trace import RunTrace
 
 
 class QAIRRuntime:
@@ -187,6 +188,14 @@ class QAIRRuntime:
         """Return lifecycle and telemetry summary for a run."""
 
         return self.run_service.summary(run_id)
+
+    def get_run_trace(
+        self,
+        run_id: str,
+    ) -> RunTrace:
+        """Return execution trace for a run."""
+
+        return self.run_service.trace(run_id)
 
     def remove_run(
         self,

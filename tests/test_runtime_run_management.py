@@ -88,3 +88,15 @@ def test_runtime_can_create_run_without_agent_name():
     run = runtime.create_run("run-without-agent")
 
     assert run.agent_name is None
+
+
+def test_runtime_can_get_run_trace():
+
+    runtime = QAIRRuntime()
+
+    run = runtime.create_run("run-1")
+
+    trace = runtime.get_run_trace(run.id)
+
+    assert trace.run is run
+    assert trace.tool_events == []

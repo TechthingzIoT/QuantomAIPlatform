@@ -4,6 +4,7 @@ from runtime.runs.query import RunQuery
 from runtime.runs.registry import RunRegistry
 from runtime.runs.run import Run
 from runtime.runs.summary import RunSummary
+from runtime.runs.trace import RunTrace
 from runtime.tools.telemetry import ToolExecutionTelemetry
 
 
@@ -112,6 +113,21 @@ class RunService:
         return RunSummary(
             run=run,
             tool_metrics=self.telemetry.metrics_for_run(
+                run_id
+            ),
+        )
+
+    def trace(
+        self,
+        run_id: str,
+    ) -> RunTrace:
+        """Return execution trace for a registered run."""
+
+        run = self.require(run_id)
+
+        return RunTrace(
+            run=run,
+            tool_events=self.telemetry.events_for_run(
                 run_id
             ),
         )
