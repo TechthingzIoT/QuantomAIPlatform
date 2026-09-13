@@ -27,7 +27,10 @@ from runtime.knowledge.retriever import KnowledgeRetriever
 from runtime.knowledge.store import KnowledgeStore
 from runtime.models.manager import ModelManager
 from runtime.prompts.selection import PromptSelector
+from runtime.runs.query import RunQuery
+from runtime.runs.run import Run
 from runtime.runs.service import RunService
+from runtime.runs.summary import RunSummary
 
 
 class QAIRRuntime:
@@ -131,6 +134,63 @@ class QAIRRuntime:
             n_gpu_layers=settings.gpu_layers,
             verbose=settings.verbose,
         )
+
+    # ==================================================
+    # Run Management
+    # ==================================================
+
+    def create_run(
+        self,
+        run_id: str,
+    ) -> Run:
+        """Create and register an execution run."""
+
+        return self.run_service.create(run_id)
+
+    def get_run(
+        self,
+        run_id: str,
+    ) -> Run | None:
+        """Return a run by ID, if registered."""
+
+        return self.run_service.get(run_id)
+
+    def require_run(
+        self,
+        run_id: str,
+    ) -> Run:
+        """Return a run by ID or raise KeyError."""
+
+        return self.run_service.require(run_id)
+
+    def list_runs(self) -> list[Run]:
+        """Return all registered runs."""
+
+        return self.run_service.runs()
+
+    def query_runs(
+        self,
+        query: RunQuery,
+    ) -> list[Run]:
+        """Return runs matching the supplied query."""
+
+        return self.run_service.query(query)
+
+    def get_run_summary(
+        self,
+        run_id: str,
+    ) -> RunSummary:
+        """Return lifecycle and telemetry summary for a run."""
+
+        return self.run_service.summary(run_id)
+
+    def remove_run(
+        self,
+        run_id: str,
+    ) -> Run | None:
+        """Remove and return a run by ID."""
+
+        return self.run_service.remove(run_id)
 
     # ==================================================
     # Lifecycle

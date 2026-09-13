@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from runtime.runs.query import RunQuery
 from runtime.runs.registry import RunRegistry
 from runtime.runs.run import Run
 from runtime.runs.summary import RunSummary
@@ -76,6 +77,27 @@ class RunService:
         run.complete()
 
         return run
+
+    def runs(self) -> list[Run]:
+        """Return all registered runs."""
+
+        return self.registry.runs()
+
+    def query(
+        self,
+        query: RunQuery,
+    ) -> list[Run]:
+        """Return runs matching the supplied query."""
+
+        return self.registry.query(query)
+
+    def remove(
+        self,
+        run_id: str,
+    ) -> Run | None:
+        """Remove and return a run by ID."""
+
+        return self.registry.remove(run_id)
 
     def summary(
         self,
