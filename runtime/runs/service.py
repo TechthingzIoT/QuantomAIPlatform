@@ -29,13 +29,15 @@ class RunService:
     def create(
         self,
         run_id: str,
+        agent_name: str | None = None,
     ) -> Run:
         """Create and register a new run."""
 
-        run = Run(id=run_id)
-
+        run = Run(
+            id=run_id,
+            agent_name=agent_name,
+        )
         self.registry.register(run)
-
         return run
 
     def get(

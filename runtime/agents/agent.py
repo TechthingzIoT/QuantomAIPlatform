@@ -295,7 +295,10 @@ class Agent:
 
         run_id = str(uuid4())
 
-        self.run_service.create(run_id)
+        self.run_service.create(
+            run_id,
+            agent_name=self.name,
+        )
         self.run_service.start(run_id)
 
         tool_events = []

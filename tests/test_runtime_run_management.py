@@ -67,3 +67,24 @@ def test_runtime_can_remove_run():
 
     assert removed is run
     assert runtime.get_run(run.id) is None
+
+
+def test_runtime_can_create_run_with_agent_name():
+
+    runtime = QAIRRuntime()
+
+    run = runtime.create_run(
+        "run-with-agent",
+        agent_name="test-agent",
+    )
+
+    assert run.agent_name == "test-agent"
+
+
+def test_runtime_can_create_run_without_agent_name():
+
+    runtime = QAIRRuntime()
+
+    run = runtime.create_run("run-without-agent")
+
+    assert run.agent_name is None

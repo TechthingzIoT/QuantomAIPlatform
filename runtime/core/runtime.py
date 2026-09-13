@@ -142,10 +142,14 @@ class QAIRRuntime:
     def create_run(
         self,
         run_id: str,
+        agent_name: str | None = None,
     ) -> Run:
         """Create and register an execution run."""
 
-        return self.run_service.create(run_id)
+        return self.run_service.create(
+            run_id,
+            agent_name=agent_name,
+        )
 
     def get_run(
         self,

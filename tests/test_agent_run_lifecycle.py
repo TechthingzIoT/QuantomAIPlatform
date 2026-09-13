@@ -92,3 +92,23 @@ def test_agent_and_run_service_share_telemetry_when_created_by_agent():
         agent.run_service.telemetry
         is telemetry
     )
+
+
+def test_agent_run_records_agent_name():
+
+    runtime = MagicMock()
+
+    runtime.generate.return_value = InferenceResponse(
+        content="Task complete."
+    )
+
+    agent = Agent(
+        runtime=runtime,
+        name="ownership-agent",
+    )
+
+    outcome = agent.run_with_outcome("Complete the task.")
+
+    run = agent.run_service.require(outcome.run_id)
+
+    assert run.agent_name == "ownership-agent"
