@@ -27,6 +27,7 @@ from runtime.knowledge.retriever import KnowledgeRetriever
 from runtime.knowledge.store import KnowledgeStore
 from runtime.models.manager import ModelManager
 from runtime.prompts.selection import PromptSelector
+from runtime.runs.service import RunService
 
 
 class QAIRRuntime:
@@ -41,6 +42,7 @@ class QAIRRuntime:
         self,
         *,
         model_manager: ModelManager | None = None,
+        run_service: RunService | None = None,
         engine: InferenceEngine | None = None,
         prompt_selector: PromptSelector | None = None,
         knowledge_store: KnowledgeStore | None = None,
@@ -100,6 +102,12 @@ class QAIRRuntime:
             knowledge_context_builder
             if knowledge_context_builder is not None
             else KnowledgeContextBuilder()
+        )
+
+        self.run_service = (
+            run_service
+            if run_service is not None
+            else RunService()
         )
 
         self.running = False

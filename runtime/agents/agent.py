@@ -58,16 +58,26 @@ class Agent:
             tool_registry if tool_registry is not None else ToolRegistry()
         )
         self.tool_executor = ToolExecutor(self.tool_registry)
+
+        runtime_run_service = getattr(
+            self.runtime,
+            "run_service",
+            None,
+        )
+
+        if run_service is not None:
+            self.run_service = run_service
+        elif isinstance(runtime_run_service, RunService):
+            self.run_service = runtime_run_service
+        else:
+            self.run_service = RunService(
+                telemetry=telemetry,
+            )
+
         self.telemetry = (
             telemetry
             if telemetry is not None
-            else ToolExecutionTelemetry()
-        )
-
-        self.run_service = (
-            run_service
-            if run_service is not None
-            else RunService(telemetry=self.telemetry)
+            else self.run_service.telemetry
         )
 
         self.running = False
