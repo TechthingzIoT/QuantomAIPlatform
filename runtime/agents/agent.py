@@ -18,6 +18,8 @@ from runtime.agents.outcome import AgentRunOutcome
 from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
 from runtime.core.runtime import QAIRRuntime
+from runtime.events.event import RuntimeEvent
+from runtime.events.event_type import RuntimeEventType
 from runtime.inference.response import ToolCallRequest
 from runtime.runs.service import RunService
 from runtime.tools.context import ToolExecutionContext
@@ -84,6 +86,30 @@ class Agent:
         )
 
         self.running = False
+
+    # ==================================================
+    # Runtime Events
+    # ==================================================
+
+    def _record_runtime_event(
+        self,
+        event_type: RuntimeEventType,
+        *,
+        run_id: str,
+        iteration: int | None = None,
+        data: dict | None = None,
+    ) -> None:
+        """Record an agent lifecycle event in the shared runtime store."""
+
+        self.run_service.event_store.record(
+            RuntimeEvent(
+                type=event_type,
+                run_id=run_id,
+                agent_name=self.name,
+                iteration=iteration,
+                data=data or {},
+            )
+        )
 
     # ==================================================
     # Lifecycle
@@ -304,6 +330,11 @@ class Agent:
         )
         self.run_service.start(run_id)
 
+        self._record_runtime_event(
+            RuntimeEventType.AGENT_STARTED,
+            run_id=run_id,
+        )
+
         tool_events = []
 
         try:
@@ -353,6 +384,12 @@ class Agent:
 
                 self.run_service.complete(run_id)
 
+                self._record_runtime_event(
+                    RuntimeEventType.AGENT_COMPLETED,
+                    run_id=run_id,
+                    iteration=iteration,
+                )
+
                 return AgentRunOutcome(
                     content=content,
                     run_id=run_id,
@@ -371,6 +408,15 @@ class Agent:
                 from runtime.runs.status import RunStatus
 
                 if run.status.value == RunStatus.RUNNING.value:
+                    self._record_runtime_event(
+                        RuntimeEventType.AGENT_FAILED,
+                        run_id=run_id,
+                        data={
+                            "error": str(exc),
+                            "error_type": type(exc).__name__,
+                        },
+                    )
+
                     self.run_service.fail(
                         run_id,
                         str(exc),

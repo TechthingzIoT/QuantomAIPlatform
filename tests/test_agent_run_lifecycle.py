@@ -112,3 +112,75 @@ def test_agent_run_records_agent_name():
     run = agent.run_service.require(outcome.run_id)
 
     assert run.agent_name == "ownership-agent"
+
+
+def test_agent_run_emits_started_and_completed_events():
+    from runtime.events.event_type import RuntimeEventType
+
+    runtime = MagicMock()
+    runtime.generate.return_value = InferenceResponse(
+        content="Task complete."
+    )
+
+    run_service = RunService()
+
+    agent = Agent(
+        runtime=runtime,
+        run_service=run_service,
+        name="event-agent",
+    )
+
+    outcome = agent.run_with_outcome("Hello QAIR")
+
+    events = run_service.event_store.events_for_run(
+        outcome.run_id
+    )
+
+    event_types = [event.type for event in events]
+
+    assert RuntimeEventType.RUN_STARTED in event_types
+    assert RuntimeEventType.AGENT_STARTED in event_types
+    assert RuntimeEventType.RUN_COMPLETED in event_types
+    assert RuntimeEventType.AGENT_COMPLETED in event_types
+
+
+def test_agent_run_emits_failed_event():
+    from runtime.events.event_type import RuntimeEventType
+
+    runtime = MagicMock()
+    runtime.generate.side_effect = RuntimeError(
+        "Inference exploded."
+    )
+
+    run_service = RunService()
+
+    agent = Agent(
+        runtime=runtime,
+        run_service=run_service,
+        name="failure-agent",
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Inference exploded.",
+    ):
+        agent.run_with_outcome("Hello QAIR")
+
+    events = run_service.event_store.events()
+
+    event_types = [event.type for event in events]
+
+    assert RuntimeEventType.RUN_STARTED in event_types
+    assert RuntimeEventType.AGENT_STARTED in event_types
+    assert RuntimeEventType.AGENT_FAILED in event_types
+    assert RuntimeEventType.RUN_FAILED in event_types
+
+    failed_event = next(
+        event
+        for event in events
+        if event.type is RuntimeEventType.AGENT_FAILED
+    )
+
+    assert failed_event.agent_name == "failure-agent"
+    assert failed_event.data["error"] == "Inference exploded."
+    assert failed_event.data["error_type"] == "RuntimeError"
