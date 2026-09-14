@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -61,12 +61,38 @@ def test_engine_accepts_custom_backend(model_manager, backend):
     assert engine.backend is backend
 
 
-def test_engine_uses_default_llama_cpp_backend(model_manager):
-    with patch("runtime.inference.engine.LlamaCppBackend") as backend_class:
-        engine = InferenceEngine(model_manager=model_manager)
+def test_engine_resolves_backend_from_registry(model_manager):
+    registry = MagicMock()
+    resolved_backend = MagicMock()
 
-    backend_class.assert_called_once_with(engine.settings)
-    assert engine.backend is backend_class.return_value
+    registry.resolve.return_value = resolved_backend
+
+    engine = InferenceEngine(
+        model_manager=model_manager,
+        registry=registry,
+    )
+
+    registry.resolve.assert_called_once_with(
+        engine.settings.inference_backend,
+        engine.settings,
+    )
+    assert engine.backend is resolved_backend
+
+
+def test_engine_explicit_backend_overrides_registry(
+    model_manager,
+    backend,
+):
+    registry = MagicMock()
+
+    engine = InferenceEngine(
+        model_manager=model_manager,
+        backend=backend,
+        registry=registry,
+    )
+
+    registry.resolve.assert_not_called()
+    assert engine.backend is backend
 
 
 def test_engine_loads_active_model(engine, backend, model):
@@ -93,17 +119,14 @@ def test_engine_load_fails_without_active_model(backend):
 
 def test_engine_loaded_delegates_to_backend(engine, backend):
     backend.loaded = True
-
     assert engine.loaded is True
 
     backend.loaded = False
-
     assert engine.loaded is False
 
 
 def test_engine_unload_delegates_to_backend(engine, backend, model):
     engine.load()
-
     engine.unload()
 
     backend.unload.assert_called_once_with()
@@ -228,7 +251,9 @@ def test_engine_generate_loads_model_lazily(
     result = engine.generate(messages)
 
     assert result == "Lazy response"
+
     backend.load.assert_called_once_with(model)
+
     backend.generate.assert_called_once_with(
         messages,
         tools=None,
@@ -248,6 +273,7 @@ def test_engine_summary(engine, backend, model):
     assert summary == {
         "loaded": True,
         "model": model.name,
+        "backend": engine.settings.inference_backend,
         "context": engine.settings.context_size,
         "gpu_layers": engine.settings.gpu_layers,
         "temperature": engine.settings.temperature,

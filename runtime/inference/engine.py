@@ -1,77 +1,64 @@
 """
-=========================================================
-QAIR Inference Engine
-=========================================================
+Provider-neutral inference orchestration for QAIR.
 
-High-level inference orchestration for QAIR.
-
-Responsibilities
-----------------
-
-• Select the active model
-• Coordinate the inference backend
-• Generate responses
-• Reload models
-• Expose runtime information
-
-The engine intentionally does not depend on a specific
-inference implementation. Backend-specific behavior is
-provided through the InferenceBackend contract.
-
-Author:
-    TIOTAIROBOTIX
-=========================================================
+The engine coordinates model selection, backend resolution, loading,
+token counting, and generation without depending on a specific
+inference provider.
 """
 
 from __future__ import annotations
 
 from runtime.config.settings import settings
 from runtime.inference.backend import InferenceBackend
-from runtime.inference.llama_cpp import LlamaCppBackend
+from runtime.inference.registry import BackendRegistry, backend_registry
 from runtime.inference.response import InferenceResponse
 from runtime.models.manager import ModelManager
 from runtime.models.model import Model
 
 
 class InferenceEngine:
-    """
-    QAIR inference engine.
-
-    The engine coordinates model selection and delegates
-    inference operations to an InferenceBackend.
-
-    By default, QAIR uses LlamaCppBackend so existing
-    local GGUF inference behavior remains unchanged.
-    """
+    """Provider-neutral inference orchestration layer."""
 
     def __init__(
         self,
         *,
         model_manager: ModelManager | None = None,
         backend: InferenceBackend | None = None,
+        registry: BackendRegistry | None = None,
     ) -> None:
         self.settings = settings
 
-        # Preserve an explicitly injected model manager.
         self.manager = (
-            model_manager if model_manager is not None else ModelManager()
+            model_manager
+            if model_manager is not None
+            else ModelManager()
         )
 
-        # Preserve an explicitly injected backend.
+        self.registry = (
+            registry
+            if registry is not None
+            else backend_registry
+        )
+
+        # An explicitly supplied backend is primarily useful for tests
+        # and advanced embedding of QAIR.
         self.backend = (
-            backend if backend is not None else LlamaCppBackend(self.settings)
+            backend
+            if backend is not None
+            else self.registry.resolve(
+                self.settings.inference_backend,
+                self.settings,
+            )
         )
 
         self._model_info: Model | None = None
 
-    # ==================================================
-    # Loading
-    # ==================================================
+    # ------------------------------------------------------------------
+    # Model lifecycle
+    # ------------------------------------------------------------------
 
     def load(self) -> None:
-        """
-        Load the currently active model through the backend.
-        """
+        """Load the currently active model through the configured backend."""
         active = self.manager.active_model()
 
         if active is None:
@@ -81,43 +68,35 @@ class InferenceEngine:
         self._model_info = active
 
     def reload(self) -> None:
-        """
-        Reload the active model.
-        """
+        """Unload and reload the currently active model."""
         self.unload()
         self.load()
 
     def unload(self) -> None:
-        """
-        Release the loaded model.
-        """
+        """Unload the active model from the inference backend."""
         self.backend.unload()
         self._model_info = None
 
-    # ==================================================
-    # Status
-    # ==================================================
+    # ------------------------------------------------------------------
+    # Runtime state
+    # ------------------------------------------------------------------
 
     @property
     def loaded(self) -> bool:
-        """
-        Whether a model is currently loaded.
-        """
+        """Return whether the inference backend currently has a model loaded."""
         return self.backend.loaded
 
     @property
     def model(self) -> Model | None:
-        """
-        Return loaded model metadata.
-        """
+        """Return the model currently tracked by the engine."""
         return self._model_info
 
-    def count_tokens(self, text: str) -> int:
-        """
-        Count tokens using the active backend.
+    # ------------------------------------------------------------------
+    # Tokenization
+    # ------------------------------------------------------------------
 
-        The model is loaded lazily when necessary.
-        """
+    def count_tokens(self, text: str) -> int:
+        """Return the backend token count for ``text``."""
         if not isinstance(text, str):
             raise TypeError("text must be a string.")
 
@@ -126,9 +105,9 @@ class InferenceEngine:
 
         return self.backend.count_tokens(text)
 
-    # ==================================================
+    # ------------------------------------------------------------------
     # Generation
-    # ==================================================
+    # ------------------------------------------------------------------
 
     def generate(
         self,
@@ -139,14 +118,14 @@ class InferenceEngine:
         temperature: float | None = None,
         top_p: float | None = None,
     ) -> InferenceResponse:
-        """
-        Generate a provider-neutral response through the active backend.
-        """
+        """Generate an inference response through the configured backend."""
         if not self.loaded:
             self.load()
 
         actual_max_tokens = (
-            self.settings.max_tokens if max_tokens is None else max_tokens
+            self.settings.max_tokens
+            if max_tokens is None
+            else max_tokens
         )
 
         actual_temperature = (
@@ -155,7 +134,11 @@ class InferenceEngine:
             else temperature
         )
 
-        actual_top_p = self.settings.top_p if top_p is None else top_p
+        actual_top_p = (
+            self.settings.top_p
+            if top_p is None
+            else top_p
+        )
 
         return self.backend.generate(
             messages,
@@ -165,17 +148,16 @@ class InferenceEngine:
             top_p=actual_top_p,
         )
 
-    # ==================================================
-    # Runtime Information
-    # ==================================================
+    # ------------------------------------------------------------------
+    # Diagnostics
+    # ------------------------------------------------------------------
 
     def summary(self) -> dict:
-        """
-        Runtime summary.
-        """
+        """Return a concise snapshot of the inference configuration/state."""
         return {
             "loaded": self.loaded,
             "model": self.model.name if self.model else None,
+            "backend": self.settings.inference_backend,
             "context": self.settings.context_size,
             "gpu_layers": self.settings.gpu_layers,
             "temperature": self.settings.temperature,

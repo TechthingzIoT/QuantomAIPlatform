@@ -15,6 +15,7 @@ from pydantic import BaseModel
 class QAIRSettings(BaseModel):
     model: str
     model_path: str
+    inference_backend: str = "llama_cpp"
 
     # Optional local embedding model used by the knowledge layer.
     embedding_model: str | None = None
