@@ -290,6 +290,53 @@ def test_runtime_start_without_active_model_fails():
         runtime.start()
 
 
+def test_runtime_start_knowledge_failure_leaves_runtime_stopped():
+    runtime, _, engine, _ = make_runtime()
+
+    with patch.object(
+        runtime,
+        "_load_registered_knowledge",
+        side_effect=RuntimeError("Knowledge loading failed"),
+    ), pytest.raises(
+        RuntimeError,
+        match="Knowledge loading failed",
+    ):
+        runtime.start()
+
+    assert runtime.running is False
+    engine.load.assert_not_called()
+
+
+def test_runtime_start_engine_failure_leaves_runtime_stopped():
+    runtime, _, engine, _ = make_runtime()
+
+    engine.load.side_effect = RuntimeError("Model loading failed")
+
+    with pytest.raises(
+        RuntimeError,
+        match="Model loading failed",
+    ):
+        runtime.start()
+
+    assert runtime.running is False
+
+
+def test_runtime_start_engine_failure_unloads_partial_engine():
+    runtime, _, engine, _ = make_runtime()
+
+    engine.load.side_effect = RuntimeError("Model loading failed")
+    engine.loaded = True
+
+    with pytest.raises(
+        RuntimeError,
+        match="Model loading failed",
+    ):
+        runtime.start()
+
+    engine.unload.assert_called_once_with()
+    assert runtime.running is False
+
+
 # ============================================================
 # Shutdown
 # ============================================================

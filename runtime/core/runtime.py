@@ -257,6 +257,10 @@ class QAIRRuntime:
 
         Discovers models, loads the active model, and loads
         registered local knowledge sources.
+
+        Startup is transactional: if initialization fails,
+        QAIR remains stopped and any partially loaded inference
+        resources are released.
         """
 
         if self.running:
@@ -274,7 +278,14 @@ class QAIRRuntime:
 
         self._load_registered_knowledge()
 
-        self.engine.load()
+        try:
+            self.engine.load()
+        except Exception:
+            if self.engine.loaded:
+                self.engine.unload()
+            self.running = False
+            raise
+
         self.running = True
 
     def stop(self) -> None:
