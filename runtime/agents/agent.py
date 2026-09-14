@@ -17,6 +17,7 @@ from uuid import uuid4
 from runtime.agents.outcome import AgentRunOutcome
 from runtime.chat.history import ConversationHistory
 from runtime.chat.message import ChatMessage, MessageRole
+from runtime.context.execution import ExecutionContext
 from runtime.core.runtime import QAIRRuntime
 from runtime.events.event import RuntimeEvent
 from runtime.events.event_type import RuntimeEventType
@@ -99,8 +100,7 @@ class Agent:
         self,
         event_type: RuntimeEventType,
         *,
-        run_id: str,
-        iteration: int | None = None,
+        context: ExecutionContext,
         data: dict | None = None,
     ) -> None:
         """Record an agent lifecycle event in the shared runtime store."""
@@ -108,9 +108,9 @@ class Agent:
         self.run_service.event_store.record(
             RuntimeEvent(
                 type=event_type,
-                run_id=run_id,
-                agent_name=self.name,
-                iteration=iteration,
+                run_id=context.run_id,
+                agent_name=context.agent_name,
+                iteration=context.iteration,
                 data=data or {},
             )
         )
@@ -119,16 +119,14 @@ class Agent:
         self,
         messages: list[dict],
         *,
-        run_id: str,
-        iteration: int | None = None,
+        context: ExecutionContext,
         tools: list[dict] | None = None,
     ) -> InferenceResponse:
         """Generate an inference response with lifecycle events."""
 
         self._record_runtime_event(
             RuntimeEventType.INFERENCE_STARTED,
-            run_id=run_id,
-            iteration=iteration,
+            context=context,
         )
 
         try:
@@ -140,8 +138,7 @@ class Agent:
         except Exception as exc:
             self._record_runtime_event(
                 RuntimeEventType.INFERENCE_FAILED,
-                run_id=run_id,
-                iteration=iteration,
+                context=context,
                 data={
                     "error": str(exc),
                     "error_type": type(exc).__name__,
@@ -151,8 +148,7 @@ class Agent:
 
         self._record_runtime_event(
             RuntimeEventType.INFERENCE_COMPLETED,
-            run_id=run_id,
-            iteration=iteration,
+            context=context,
         )
 
         return response
@@ -376,9 +372,14 @@ class Agent:
         )
         self.run_service.start(run_id)
 
+        execution_context = ExecutionContext(
+            run_id=run_id,
+            agent_name=self.name,
+        )
+
         self._record_runtime_event(
             RuntimeEventType.AGENT_STARTED,
-            run_id=run_id,
+            context=execution_context,
         )
 
         tool_events = []
@@ -388,10 +389,15 @@ class Agent:
                 messages = self.history.to_messages()
                 tools = self.tool_registry.definitions() or None
 
+                iteration_context = ExecutionContext(
+                    run_id=execution_context.run_id,
+                    agent_name=execution_context.agent_name,
+                    iteration=iteration,
+                )
+
                 response = self._generate_with_events(
                     messages,
-                    run_id=run_id,
-                    iteration=iteration,
+                    context=iteration_context,
                     tools=tools,
                 )
 
@@ -433,8 +439,7 @@ class Agent:
 
                 self._record_runtime_event(
                     RuntimeEventType.AGENT_COMPLETED,
-                    run_id=run_id,
-                    iteration=iteration,
+                    context=iteration_context,
                 )
 
                 return AgentRunOutcome(
@@ -457,7 +462,7 @@ class Agent:
                 if run.status.value == RunStatus.RUNNING.value:
                     self._record_runtime_event(
                         RuntimeEventType.AGENT_FAILED,
-                        run_id=run_id,
+                        context=execution_context,
                         data={
                             "error": str(exc),
                             "error_type": type(exc).__name__,
