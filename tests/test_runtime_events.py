@@ -93,3 +93,69 @@ def test_runtime_returns_empty_events_for_unknown_agent():
     runtime = QAIRRuntime()
 
     assert runtime.get_agent_events("unknown-agent") == []
+
+
+def test_runtime_records_knowledge_retrieved_event():
+    runtime = QAIRRuntime()
+
+    runtime.start()
+
+    runtime.knowledge_retriever.search = lambda query, limit: [
+        object()
+    ]
+
+    runtime.knowledge_context_builder.build = (
+        lambda documents, **kwargs: "Knowledge context."
+    )
+
+    runtime.engine.generate = lambda *args, **kwargs: None
+
+    runtime.generate(
+        [
+            {
+                "role": "user",
+                "content": "What is QAIR?",
+            }
+        ],
+        use_knowledge=True,
+    )
+
+    events = runtime.query_events(
+        RuntimeEventQuery(
+            type=RuntimeEventType.KNOWLEDGE_RETRIEVED,
+        )
+    )
+
+    assert len(events) == 1
+    assert events[0].data["query"] == "What is QAIR?"
+    assert events[0].data["document_count"] == 1
+
+
+def test_runtime_records_empty_knowledge_retrieval_event():
+    runtime = QAIRRuntime()
+
+    runtime.start()
+
+    runtime.knowledge_retriever.search = lambda query, limit: []
+
+    runtime.engine.generate = lambda *args, **kwargs: None
+
+    runtime.generate(
+        [
+            {
+                "role": "user",
+                "content": "Unknown knowledge",
+            }
+        ],
+        use_knowledge=True,
+    )
+
+    events = runtime.query_events(
+        RuntimeEventQuery(
+            type=RuntimeEventType.KNOWLEDGE_RETRIEVED,
+        )
+    )
+
+    assert len(events) == 1
+    assert events[0].data["query"] == "Unknown knowledge"
+    assert events[0].data["document_count"] == 0

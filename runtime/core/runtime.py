@@ -17,6 +17,7 @@ from typing import Self
 
 from runtime.config.settings import settings
 from runtime.events.event import RuntimeEvent
+from runtime.events.event_type import RuntimeEventType
 from runtime.events.query import RuntimeEventQuery
 from runtime.inference.engine import InferenceEngine
 from runtime.inference.response import InferenceResponse
@@ -487,6 +488,16 @@ class QAIRRuntime:
                 documents = self.knowledge_retriever.search(
                     query,
                     limit=knowledge_limit,
+                )
+
+                self.event_store.record(
+                    RuntimeEvent(
+                        type=RuntimeEventType.KNOWLEDGE_RETRIEVED,
+                        data={
+                            "query": query,
+                            "document_count": len(documents),
+                        },
+                    )
                 )
 
                 if documents:
