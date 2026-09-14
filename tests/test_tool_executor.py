@@ -1,6 +1,7 @@
 import time
 from typing import ClassVar
 
+from runtime.context.execution import ExecutionContext
 from runtime.tools.config import ToolExecutionConfig
 from runtime.tools.errors import ToolExecutionTimeoutError
 from runtime.tools.executor import ToolExecutor
@@ -141,8 +142,11 @@ def test_executor_accepts_optional_execution_context():
     executor = ToolExecutor(registry)
 
     context = ToolExecutionContext(
+        execution=ExecutionContext(
+            run_id="run_1",
+            agent_name="qair-agent",
+        ),
         tool_call_id="call_1",
-        agent_name="qair-agent",
     )
 
     result = executor.execute(
@@ -186,7 +190,7 @@ class ContextAwareEchoTool:
                 else None
             ),
             "agent_name": (
-                context.agent_name
+                context.execution.agent_name
                 if context is not None
                 else None
             ),
@@ -204,8 +208,11 @@ def test_executor_passes_context_to_context_aware_tool():
     executor = ToolExecutor(registry)
 
     context = ToolExecutionContext(
+        execution=ExecutionContext(
+            run_id="run_42",
+            agent_name="qair-agent",
+        ),
         tool_call_id="call_42",
-        agent_name="qair-agent",
     )
 
     result = executor.execute(

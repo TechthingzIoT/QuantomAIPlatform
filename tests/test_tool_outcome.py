@@ -1,5 +1,6 @@
 from typing import ClassVar
 
+from runtime.context.execution import ExecutionContext
 from runtime.tools.context import ToolExecutionContext
 from runtime.tools.executor import ToolExecutor
 from runtime.tools.protocol import ToolCall
@@ -80,15 +81,12 @@ def test_execution_outcome_contains_context():
     executor = ToolExecutor(registry)
 
     context = ToolExecutionContext(
-
+        execution=ExecutionContext(
+            run_id="run_99",
+            agent_name="qair-agent",
+            iteration=3,
+        ),
         tool_call_id="call_99",
-
-        agent_name="qair-agent",
-
-        metadata={
-            "iteration": 3,
-        },
-
     )
 
     outcome = executor.execute_with_outcome(

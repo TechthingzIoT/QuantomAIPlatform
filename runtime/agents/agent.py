@@ -280,10 +280,9 @@ class Agent:
         self,
         tool_call: ToolCallRequest,
         *,
-        iteration: int,
-        run_id: str,
+        execution_context: ExecutionContext,
     ) -> ToolExecutionOutcome:
-        """Execute an inference-requested tool with telemetry."""
+        """Execute an inference-requested tool with shared execution context."""
 
         from runtime.tools.protocol import ToolCall
 
@@ -292,18 +291,14 @@ class Agent:
             arguments=tool_call.arguments,
         )
 
-        context = ToolExecutionContext(
+        tool_context = ToolExecutionContext(
+            execution=execution_context,
             tool_call_id=tool_call.id,
-            run_id=run_id,
-            agent_name=self.name,
-            metadata={
-                "iteration": iteration,
-            },
         )
 
         return self.tool_executor.execute_with_outcome(
             execution_call,
-            context=context,
+            context=tool_context,
         )
 
     def _record_tool_result(
@@ -407,8 +402,7 @@ class Agent:
                     for tool_call in response.tool_calls:
                         execution = self._execute_tool_call(
                             tool_call,
-                            iteration=iteration,
-                            run_id=run_id,
+                            execution_context=iteration_context,
                         )
 
                         tool_events.append(execution.event)

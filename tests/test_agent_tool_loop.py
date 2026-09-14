@@ -165,12 +165,12 @@ class ContextAwareLabStatusTool:
                 else None
             ),
             "agent_name": (
-                context.agent_name
+                context.execution.agent_name
                 if context is not None
                 else None
             ),
             "iteration": (
-                context.metadata.get("iteration")
+                context.execution.iteration
                 if context is not None
                 else None
             ),

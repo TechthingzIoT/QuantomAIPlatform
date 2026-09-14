@@ -79,10 +79,10 @@ class ToolExecutor:
         if self.event_store is None:
             return
 
-        metadata = (
-            context.metadata
+        execution = (
+            context.execution
             if context is not None
-            else {}
+            else None
         )
 
         event_data = {
@@ -96,16 +96,20 @@ class ToolExecutor:
             RuntimeEvent(
                 type=event_type,
                 run_id=(
-                    context.run_id
-                    if context is not None
+                    execution.run_id
+                    if execution is not None
                     else None
                 ),
                 agent_name=(
-                    context.agent_name
-                    if context is not None
+                    execution.agent_name
+                    if execution is not None
                     else None
                 ),
-                iteration=metadata.get("iteration"),
+                iteration=(
+                    execution.iteration
+                    if execution is not None
+                    else None
+                ),
                 data=event_data,
             )
         )
@@ -194,10 +198,10 @@ class ToolExecutor:
             time.perf_counter() - started_at
         ) * 1000
 
-        metadata = (
-            context.metadata
+        execution = (
+            context.execution
             if context is not None
-            else {}
+            else None
         )
 
         event = ToolExecutionEvent(
@@ -212,17 +216,19 @@ class ToolExecutor:
                 else None
             ),
             run_id=(
-                context.run_id
-                if context is not None
+                execution.run_id
+                if execution is not None
                 else None
             ),
             agent_name=(
-                context.agent_name
-                if context is not None
+                execution.agent_name
+                if execution is not None
                 else None
             ),
-            iteration=metadata.get(
-                "iteration"
+            iteration=(
+                execution.iteration
+                if execution is not None
+                else None
             ),
             error_type=execution_result.error_type,
             error_message=execution_result.error_message,
